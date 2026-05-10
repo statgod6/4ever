@@ -31,6 +31,7 @@ import ReflectionsScreen from '../screens/ReflectionsScreen'
 import MyContextScreen from '../screens/MyContextScreen'
 import MemoryScreen from '../screens/MemoryScreen'
 import EditProfileScreen from '../screens/EditProfileScreen'
+import PrivacyDataScreen from '../screens/PrivacyDataScreen'
 import ThoughtDetailScreen from '../screens/ThoughtDetailScreen'
 import PersonDetailScreen from '../screens/PersonDetailScreen'
 import ContactsPickerScreen from '../screens/ContactsPickerScreen'
@@ -138,6 +139,7 @@ function MoreStackScreen() {
       <MoreStack.Screen name="Memory" component={MemoryScreen} options={{ title: 'Memory System' }} />
       <MoreStack.Screen name="KnowledgeWorker" component={KnowledgeWorkerScreen} options={{ title: 'Knowledge Worker' }} />
       <MoreStack.Screen name="EditProfile" component={EditProfileScreen} options={{ title: 'Edit Profile' }} />
+      <MoreStack.Screen name="PrivacyData" component={PrivacyDataScreen} options={{ title: 'Privacy & Data' }} />
     </MoreStack.Navigator>
   )
 }

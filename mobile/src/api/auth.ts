@@ -76,4 +76,26 @@ export const authApi = {
     const response = await apiClient.delete('/users/avatar')
     return response.data
   },
+
+  /**
+   * GDPR Art. 15/20 data export — returns a full JSON dump of the user's data.
+   * The backend streams this with Content-Disposition: attachment so a browser
+   * would download it directly; on mobile we just read the JSON body.
+   * Throttled server-side to 5/hour.
+   */
+  exportMyData: async (): Promise<unknown> => {
+    const response = await apiClient.get('/users/me/export')
+    return response.data
+  },
+
+  /**
+   * Irrevocably delete the user's account and all associated data
+   * (cascade deletes thoughts, memories, circle, KW docs, uploaded files, etc).
+   * Backend requires OTP re-verification in production; in dev a confirm string
+   * can be used instead. Throttled server-side to 3/hour.
+   */
+  deleteMyAccount: async (payload: { otpCode?: string; confirm?: string }): Promise<{ ok: true }> => {
+    const response = await apiClient.delete('/users/me', { data: payload })
+    return response.data
+  },
 }

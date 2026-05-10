@@ -20,6 +20,7 @@ const menuItems = [
   { key: 'Reflections', icon: '✨', label: 'Reflections', screen: 'Reflections' },
   { key: 'MyContext', icon: '👤', label: 'My Context', screen: 'MyContext' },
   { key: 'Memory', icon: '🧠', label: 'Memory System', screen: 'Memory' },
+  { key: 'PrivacyData', icon: '🔒', label: 'Privacy & Data', screen: 'PrivacyData' },
 ]
 
 const AVATAR_COLORS = [
