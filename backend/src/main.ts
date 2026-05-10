@@ -77,11 +77,10 @@ async function bootstrap() {
     },
   });
 
-  // ─── Health check (no auth, bypasses /api prefix) ─────────────────────────
-  const httpAdapter = app.getHttpAdapter();
-  httpAdapter.get('/api/health', (_req: any, res: any) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
-  });
+  // ─── Health / probe endpoints ─────────────────────────────────────────────
+  // Now provided by HealthModule (/api/health + /api/livez + /api/readyz).
+  // HealthModule includes DB connectivity probe + required-config check;
+  // the old inline /api/health is superseded but the path still works.
 
   // ─── Graceful shutdown (SIGTERM / SIGINT) ─────────────────────────────────
   // Enables Nest lifecycle hooks so modules can drain in-flight work (LLM

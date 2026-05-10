@@ -28,14 +28,28 @@ services:
       # No insecure default: the container will fail to start if this is unset, which is correct.
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required and must not be empty}
       PORT: 3001
+      # Optional env passed through when set on the host. Matches .env.example.
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_PHONE_NUMBER: ${TWILIO_PHONE_NUMBER:-}
+      TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+      E2B_API_KEY: ${E2B_API_KEY:-}
+      ADMIN_SECRET: ${ADMIN_SECRET:-}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      TTS_MODEL: ${TTS_MODEL:-}
     ports:
       - "3001:3001"
     depends_on:
       postgres:
         condition: service_healthy
+    # NOTE: bind mounts for hot-reload live in docker-compose.override.yml so
+    # they apply to `docker compose up` in dev but are stripped for the
+    # production build. A production deploy should mount ./backend/uploads
+    # onto a managed volume (or migrate to object storage — P5-storage).
     volumes:
-      - ./backend:/app
-      - /app/node_modules
+      - backend_uploads:/app/uploads
+    restart: unless-stopped
 
   frontend:
     build:
@@ -43,9 +57,11 @@ services:
       dockerfile: Dockerfile
     container_name: thinkingos-frontend
     ports:
-      - "3000:80"
+      - "3000:8080"
     depends_on:
       - backend
+    restart: unless-stopped
 
 volumes:
   postgres_data:
+  backend_uploads:

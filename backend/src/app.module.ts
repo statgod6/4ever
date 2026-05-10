@@ -25,6 +25,7 @@ import { KnowledgeWorkerModule } from './knowledge-worker/knowledge-worker.modul
 import { AdminModule } from './admin/admin.module';
 import { UsageModule } from './usage/usage.module';
 import { ConsentModule } from './consent/consent.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -66,6 +67,7 @@ import { ConsentModule } from './consent/consent.module';
     AdminModule,
     UsageModule,
     ConsentModule,
+    HealthModule,
   ],
   providers: [
     {
