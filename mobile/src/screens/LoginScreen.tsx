@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  KeyboardAvoidingView, Platform, ScrollView,
+  KeyboardAvoidingView, Platform, ScrollView, Linking,
 } from 'react-native'
 import * as AppleAuthentication from 'expo-apple-authentication'
 import { useAuthStore } from '../store/authStore'
@@ -313,6 +313,27 @@ export default function LoginScreen() {
             </>
           )}
         </View>
+
+        {/* Legal footer — required by App Store for accounts with user-generated content. */}
+        <View style={styles.legalFooter}>
+          <Text style={styles.legalText}>
+            By continuing you agree to our{' '}
+            <Text
+              style={styles.legalLink}
+              onPress={() => Linking.openURL('https://4ever.app/terms').catch(() => {})}
+            >
+              Terms of Service
+            </Text>{' '}
+            and{' '}
+            <Text
+              style={styles.legalLink}
+              onPress={() => Linking.openURL('https://4ever.app/privacy').catch(() => {})}
+            >
+              Privacy Policy
+            </Text>
+            .
+          </Text>
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   )
@@ -355,4 +376,7 @@ const createStyles = (colors: typeof Colors, isDark: boolean = false) => StyleSh
   dividerLine: { flex: 1, height: 1, backgroundColor: colors.border },
   dividerText: { marginHorizontal: Spacing.md, fontSize: FontSize.xs, color: colors.textMuted, textTransform: 'uppercase' },
   appleButton: { width: '100%', height: 48 },
+  legalFooter: { marginTop: Spacing.xl, paddingHorizontal: Spacing.md, alignItems: 'center' },
+  legalText: { fontSize: FontSize.xs, color: colors.textMuted, textAlign: 'center', lineHeight: 18 },
+  legalLink: { color: colors.primary[500], fontWeight: '600' },
 })

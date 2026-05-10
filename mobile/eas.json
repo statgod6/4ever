@@ -1,7 +1,7 @@
 {
   "cli": {
-    "version": ">= 12.0.0",
-    "appVersionSource": "local",
+    "version": ">= 13.0.0",
+    "appVersionSource": "remote",
     "requireCommit": true
   },
   "build": {
@@ -19,26 +19,28 @@
       },
       "ios": {
         "simulator": false,
-        "buildConfiguration": "Debug"
+        "buildConfiguration": "Debug",
+        "resourceClass": "m-medium"
       }
     },
 
-    "_comment_preview": "Staging / QA builds — release-mode JS, sideloaded via internal distribution. Points at the staging API.",
+    "_comment_preview": "Staging / QA builds — release-mode JS, sideloaded via internal distribution. Points at the staging API (swap for your Fly app URL once deployed).",
     "preview": {
       "distribution": "internal",
       "channel": "preview",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://api-staging.4ever.app/api"
+        "EXPO_PUBLIC_API_URL": "https://fourever-backend.fly.dev/api"
       },
       "android": {
         "buildType": "apk"
       },
       "ios": {
-        "simulator": false
+        "simulator": false,
+        "resourceClass": "m-medium"
       }
     },
 
-    "_comment_production": "Store-ready AAB + IPA. Auto-incrementing build numbers ensure every upload is unique.",
+    "_comment_production": "Store-ready AAB + IPA. Auto-incrementing build numbers + remote versioning ensure every upload is unique.",
     "production": {
       "autoIncrement": true,
       "channel": "production",
@@ -48,18 +50,20 @@
       "android": {
         "buildType": "app-bundle"
       },
-      "ios": {}
+      "ios": {
+        "resourceClass": "m-medium"
+      }
     }
   },
   "submit": {
     "production": {
       "ios": {
-        "appleId": "REPLACE_WITH_APPLE_ID",
+        "appleId": "REPLACE_WITH_APPLE_ID_EMAIL",
         "ascAppId": "REPLACE_WITH_ASC_APP_ID",
-        "appleTeamId": "REPLACE_WITH_TEAM_ID"
+        "appleTeamId": "REPLACE_WITH_APPLE_TEAM_ID"
       },
       "android": {
-        "serviceAccountKeyPath": "./play-service-account.json",
+        "serviceAccountKeyPath": "./secrets/play-service-account.json",
         "track": "internal",
         "releaseStatus": "draft"
       }

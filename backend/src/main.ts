@@ -6,7 +6,13 @@ import helmet from 'helmet';
 import * as compression from 'compression';
 import { join } from 'path';
 import { Logger as PinoLogger } from 'nestjs-pino';
+import { initSentry, Sentry } from './sentry';
+import { SentryExceptionFilter } from './common/sentry-exception.filter';
 import { AppModule } from './app.module';
+
+// Sentry must be initialized before *anything* Nest does — a silent no-op
+// when SENTRY_DSN is unset.
+initSentry();
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
@@ -63,6 +69,11 @@ async function bootstrap() {
     }),
   );
 
+  // Global error filter (Sentry) — forwards unhandled 5xx errors to Sentry
+  // (no-op when SENTRY_DSN is unset) while preserving Nest's default 4xx
+  // response contract.
+  app.useGlobalFilters(new SentryExceptionFilter());
+
   app.setGlobalPrefix('api');
 
   // ─── Static uploads (avatars, KW generated assets) ────────────────────────
@@ -103,6 +114,12 @@ async function bootstrap() {
   );
 }
 bootstrap().catch((err) => {
+  // Make sure fatal bootstrap crashes reach Sentry before the process dies.
+  try {
+    Sentry.captureException(err);
+  } catch {
+    // ignore — Sentry is a no-op when DSN is unset
+  }
   // eslint-disable-next-line no-console
   console.error('Fatal bootstrap error:', err);
   process.exit(1);

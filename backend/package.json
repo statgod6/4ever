@@ -41,6 +41,7 @@
     "@nestjs/throttler": "^6.5.0",
     "@nestjs/websockets": "^10.4.22",
     "@prisma/client": "^5.7.1",
+    "@sentry/node": "^9.47.1",
     "@tavily/core": "^0.7.2",
     "@types/passport-local": "^1.0.38",
     "bcryptjs": "^2.4.3",
