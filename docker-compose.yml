@@ -24,7 +24,9 @@ services:
     environment:
       NODE_ENV: production
       DATABASE_URL: postgresql://${POSTGRES_USER:-thinkingos}:${POSTGRES_PASSWORD:-thinkingos_secret}@postgres:5432/${POSTGRES_DB:-thinkingos}?schema=public
-      JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-key-change-in-production}
+      # JWT_SECRET must be supplied via the environment or an orchestrator secret store.
+      # No insecure default: the container will fail to start if this is unset, which is correct.
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required and must not be empty}
       PORT: 3001
     ports:
       - "3001:3001"

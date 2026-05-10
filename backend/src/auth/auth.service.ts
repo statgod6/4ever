@@ -56,8 +56,10 @@ export class AuthService {
       },
     });
 
-    // Always log OTP to console for dev convenience
-    console.log(`[OTP] ${normalized}: ${code}`);
+    // Log OTP only in non-production environments. Never log live OTP codes in prod.
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`[OTP] ${normalized}: ${code}`);
+    }
 
     // Send via Twilio if configured and from/to are different
     if (this.twilioClient && this.twilioPhone !== normalized) {
