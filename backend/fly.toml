@@ -1,0 +1,69 @@
+# fly.toml — 4Ever backend production deployment
+#
+# Usage (from the backend/ directory):
+#   fly launch --no-deploy          # first time only; accept the generated app name or override
+#   fly secrets set DATABASE_URL=... JWT_SECRET=... OPENROUTER_API_KEY=... \
+#                   TWILIO_ACCOUNT_SID=... TWILIO_AUTH_TOKEN=... TWILIO_FROM_NUMBER=... \
+#                   CORS_ORIGINS=https://app.4ever.app \
+#                   ADMIN_SECRET=... APPLE_CLIENT_ID=app.fourever.ios \
+#                   SENTRY_DSN=... TAVILY_API_KEY=... E2B_API_KEY=...
+#   fly deploy
+#
+# Notes:
+# - DO NOT put secrets in this file. Use `fly secrets set`.
+# - DATABASE_URL should point at your managed Postgres with pgvector
+#   (Neon / Supabase / Fly Postgres with extension enabled).
+# - Uploads directory is NOT persistent on Fly by default. Before going
+#   live, migrate backend/uploads/* to S3/R2 (see p5-storage).
+# - Health probes map to the new /api/livez and /api/readyz endpoints.
+
+app = "fourever-backend"
+primary_region = "sin"     # Singapore; change to your closest region
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "3001"
+  # CORS_ORIGINS is set via `fly secrets` to avoid accidental wildcard in git.
+  LOG_LEVEL = "info"
+
+[http_service]
+  internal_port = 3001
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+  [[http_service.checks]]
+    grace_period = "30s"
+    interval = "15s"
+    method = "GET"
+    timeout = "5s"
+    path = "/api/livez"
+    protocol = "http"
+
+  [[http_service.checks]]
+    grace_period = "60s"
+    interval = "30s"
+    method = "GET"
+    timeout = "10s"
+    path = "/api/readyz"
+    protocol = "http"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"
+  cpus = 1
+
+# Scaling guidance:
+# - Start with 1 shared-cpu-1x @ 1GB. Monitor p95 latency.
+# - LLM-streaming routes are I/O bound, not CPU — horizontal scale is fine.
+# - When upgrading to 2+ machines, add a Redis for shared rate-limit state
+#   (current @nestjs/throttler uses in-memory, which desyncs across instances).
+
+[deploy]
+  release_command = "npx prisma migrate deploy"
+  strategy = "rolling"
