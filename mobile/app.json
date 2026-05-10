@@ -2,7 +2,11 @@
   "expo": {
     "name": "4Ever",
     "slug": "4ever-app",
+    "scheme": "fourever",
     "version": "1.0.0",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -12,20 +16,51 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
+    "assetBundlePatterns": ["**/*"],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "app.fourever.ios",
+      "buildNumber": "1",
+      "requireFullScreen": false,
+      "config": {
+        "usesNonExemptEncryption": false
+      },
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "Allow 4Ever to use the camera so you can take a profile picture.",
+        "NSPhotoLibraryUsageDescription": "Allow 4Ever to access your photos so you can set a profile picture.",
+        "NSPhotoLibraryAddUsageDescription": "Allow 4Ever to save images to your photo library.",
+        "NSMicrophoneUsageDescription": "Allow 4Ever to access your microphone so you can talk with Core and your personas using voice.",
+        "NSContactsUsageDescription": "Allow 4Ever to access your contacts so you can add the people closest to you to your Circle.",
+        "NSUserTrackingUsageDescription": "4Ever does not track you across other apps or websites."
+      }
     },
     "android": {
+      "package": "app.fourever.android",
+      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.INTERNET",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_CONTACTS",
+        "android.permission.CAMERA",
+        "android.permission.READ_MEDIA_IMAGES"
+      ],
+      "blockedPermissions": [
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
+    "jsEngine": "hermes",
     "plugins": [
       "expo-font",
       "expo-secure-store",
@@ -48,6 +83,11 @@
           "microphonePermission": "Allow 4Ever to access your microphone so you can talk with Core."
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "REPLACE_WITH_EAS_PROJECT_ID"
+      }
+    }
   }
 }
