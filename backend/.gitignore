@@ -1,0 +1,11 @@
+node_modules
+# Keep environment variables out of version control
+.env
+
+/generated/prisma
+
+# User-uploaded files (avatars, etc.) — keep directory structure only
+/uploads/**
+!/uploads/
+!/uploads/**/
+!/uploads/**/.gitkeep

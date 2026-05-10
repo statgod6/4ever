@@ -1,0 +1,17 @@
+node_modules
+dist
+npm-debug.log
+.env
+.env.*
+!.env.example
+.git
+.gitignore
+.vscode
+.idea
+coverage
+*.log
+test-*.js
+list-users.js
+README.md
+Dockerfile
+.dockerignore

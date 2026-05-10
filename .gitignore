@@ -1,0 +1,95 @@
+# ─────────────────────────────────────────────────────────────
+# 4Ever / ThinkingOS — repo-root .gitignore
+# Ordered by risk: secrets first, then build artifacts, then OS cruft.
+# ─────────────────────────────────────────────────────────────
+
+# === SECRETS — never commit ===
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+# API keys / credentials (defense-in-depth if someone names a file badly)
+*.pem
+*.key
+*.p8
+*.p12
+*.jks
+*.mobileprovision
+*secret*.json
+*service-account*.json
+*credentials*.json
+google-services.json
+GoogleService-Info.plist
+
+# === Node / npm ===
+node_modules/
+**/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# === Build output ===
+dist/
+build/
+**/dist/
+**/build/
+*.tsbuildinfo
+
+# === NestJS / Prisma ===
+backend/dist/
+backend/generated/
+backend/prisma/generated/
+
+# === Expo / React Native ===
+mobile/.expo/
+mobile/dist/
+mobile/web-build/
+mobile/expo-env.d.ts
+mobile/.kotlin/
+mobile/ios/
+mobile/android/
+mobile/.metro-health-check*
+
+# === User-uploaded content (local dev only) ===
+backend/uploads/**
+!backend/uploads/
+!backend/uploads/**/.gitkeep
+
+# === Boot / runtime logs ===
+backend/boot-*.log
+*.log
+logs/
+
+# === Test / scratch artifacts ===
+test-*.js
+!test-*.spec.ts
+!test-*.test.ts
+
+# === Editor / OS ===
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# === Coverage / cache ===
+coverage/
+.nyc_output/
+.cache/
+.next/
+.turbo/
+
+# === Docker local volumes ===
+postgres_data/
+
+# === Misc ===
+expo-qr.png
+*.tgz
+*.bak

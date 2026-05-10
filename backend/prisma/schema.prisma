@@ -1,0 +1,754 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  extensions = [vector]
+}
+
+model User {
+  id          String   @id @default(uuid())
+  phoneNumber String   @unique @map("phone_number")
+  name        String   @default("")
+  avatarUrl   String?  @map("avatar_url")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Premium gating for Knowledge Worker agent (tier = "free" | "premium")
+  subscriptionTier      String    @default("free") @map("subscription_tier")
+  subscriptionExpiresAt DateTime? @map("subscription_expires_at")
+
+  // Tri-chat mediator monthly quota (free tier = 10 turns/month, premium = unlimited)
+  triChatTurnsUsedMonth Int       @default(0) @map("tri_chat_turns_used_month")
+  triChatPeriodStart    DateTime? @map("tri_chat_period_start")
+
+  // Relationship health report opt-in (v2)
+  relationshipHealthOptIn Boolean @default(false) @map("relationship_health_opt_in")
+
+  thoughts       Thought[]
+  personas       Persona[]
+  memories       Memory[]
+  context        UserContext?
+  insightReports InsightReport[]
+  dayPlans       DayPlan[]
+  dailyCheckIns  DailyCheckIn[]
+  actionItems    ActionItem[]
+  personaDocuments PersonaDocument[]
+  coreChatMessages CoreChatMessage[]
+  relationships  RelationshipPerson[]
+  rituals        RelationshipRitual[]
+  lifeEvents     LifeEvent[]
+  tensions       TensionEntry[]
+  personaChatMessages PersonaChatMessage[]
+  connectionsSent     Connection[]     @relation("ConnectionsSent")
+  connectionsReceived Connection[]     @relation("ConnectionsReceived")
+  messagesSent        DirectMessage[]  @relation("MessagesSent")
+  messagesReceived    DirectMessage[]  @relation("MessagesReceived")
+  sharedNotesAuthored SharedNote[]     @relation("SharedNotesAuthored")
+  messageReactions    MessageReaction[]
+  lastSeenAt          DateTime?        @map("last_seen_at")
+  coreChatSummaries   CoreChatSummary[]
+  profileChangeLogs   ProfileChangeLog[]
+  kwConversations     KwConversation[]
+  kwDocuments         KwDocument[]
+  dimensionRatings    DimensionRating[]
+  dimensionSignals    DimensionSignal[]
+
+  @@map("users")
+}
+
+model Thought {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  title       String
+  rawText     String   @map("raw_text")
+  thoughtType String   @map("thought_type")
+  status      String   @default("open")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  threads   ThoughtThread[]
+  embedding ThoughtEmbedding?
+
+  @@map("thoughts")
+}
+
+model ThoughtThread {
+  id        String   @id @default(uuid())
+  thoughtId String   @map("thought_id")
+  threadKey String   @unique @map("thread_key")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  thought   Thought          @relation(fields: [thoughtId], references: [id], onDelete: Cascade)
+  messages  Message[]
+  runs      PersonaRun[]
+  summary   ThoughtSummary?
+
+  @@map("thought_threads")
+}
+
+model Persona {
+  id          String   @id @default(uuid())
+  userId      String?  @map("user_id")
+  name        String
+  description String?
+  systemPrompt String  @map("system_prompt")
+  modelName   String   @map("model_name")
+  category    String?
+  isTemplate  Boolean  @default(false) @map("is_template")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  user User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  runs PersonaRun[]
+  documents PersonaDocument[]
+  chatMessages PersonaChatMessage[]
+
+  @@index([isTemplate])
+  @@map("personas")
+}
+
+model Message {
+  id        String   @id @default(uuid())
+  threadId  String   @map("thread_id")
+  role      String
+  content   String
+  personaId String?  @map("persona_id")
+  modelName String?  @map("model_name")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  thread ThoughtThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@map("messages")
+}
+
+model PersonaRun {
+  id         String   @id @default(uuid())
+  threadId   String   @map("thread_id")
+  personaId  String   @map("persona_id")
+  inputText  String   @map("input_text")
+  outputText String   @map("output_text")
+  modelUsed  String   @map("model_used")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  thread  ThoughtThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  persona Persona       @relation(fields: [personaId], references: [id], onDelete: Cascade)
+
+  @@map("persona_runs")
+}
+
+model ThoughtSummary {
+  id             String   @id @default(uuid())
+  threadId       String   @unique @map("thread_id")
+  runningSummary String   @map("running_summary")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  thread ThoughtThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@map("thought_summaries")
+}
+
+model Memory {
+  id              String   @id @default(uuid())
+  userId          String   @map("user_id")
+  memoryType      String   @map("memory_type")
+  content         String
+  importanceScore Float    @map("importance_score")
+  sourceThreadId  String?  @map("source_thread_id")
+  lastAccessedAt  DateTime @default(now()) @map("last_accessed_at")
+  accessCount     Int      @default(0) @map("access_count")
+  status          String   @default("active") // active | consolidated | archived | contradicted
+  supersededById  String?  @map("superseded_by_id")
+  category        String?  // user-defined tag for grouping
+  source          String   @default("thought") // thought | core_chat | persona_reply | manual
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  embedding MemoryEmbedding?
+
+  @@index([userId, status])
+  @@map("memories")
+}
+
+model MemoryEmbedding {
+  id              String                 @id @default(uuid())
+  memoryId        String                 @unique @map("memory_id")
+  embedding       Unsupported("vector(1536)")?
+  createdAt       DateTime               @default(now()) @map("created_at")
+
+  memory Memory @relation(fields: [memoryId], references: [id], onDelete: Cascade)
+
+  @@map("memory_embeddings")
+}
+
+model InsightReport {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  reportType  String   @map("report_type")
+  title       String
+  content     String
+  metadata    String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("insight_reports")
+}
+
+model ThoughtEmbedding {
+  id         String                          @id @default(uuid())
+  thoughtId  String                          @unique @map("thought_id")
+  embedding  Unsupported("vector(1536)")?
+  createdAt  DateTime                        @default(now()) @map("created_at")
+
+  thought Thought @relation(fields: [thoughtId], references: [id], onDelete: Cascade)
+
+  @@map("thought_embeddings")
+}
+
+model DayPlan {
+  id        String     @id @default(uuid())
+  userId    String     @map("user_id")
+  date      DateTime   @db.Date
+  createdAt DateTime   @default(now()) @map("created_at")
+  updatedAt DateTime   @updatedAt @map("updated_at")
+
+  user  User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tasks PlanTask[]
+
+  @@unique([userId, date])
+  @@map("day_plans")
+}
+
+model PlanTask {
+  id        String   @id @default(uuid())
+  planId    String   @map("plan_id")
+  timeSlot  String   @map("time_slot")
+  task      String
+  insight      String?
+  status       String   @default("pending") // pending, done, skipped
+  completedAt  DateTime? @map("completed_at")
+  sortOrder    Int      @default(0) @map("sort_order")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  plan      DayPlan             @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@map("plan_tasks")
+}
+
+model DailyCheckIn {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  date      DateTime @db.Date
+  mood      Int      // 1-5 scale
+  energy    Int      // 1-5 scale
+  note      String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@map("daily_check_ins")
+}
+
+model ActionItem {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  threadId  String?   @map("thread_id")
+  personaId String?   @map("persona_id")
+  content   String
+  dimension String?   // life dimension tag
+  status    String    @default("pending") // pending, done, dismissed
+  dueDate   DateTime? @db.Date @map("due_date")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@map("action_items")
+}
+
+model UserContext {
+  id                String   @id @default(uuid())
+  userId            String   @unique @map("user_id")
+  name              String?  @map("display_name")
+  age               String?
+  location          String?
+  role              String?
+  background        String?
+  currentProjects   String?  @map("current_projects")
+  goals             String?
+  situation         String?
+  values            String?
+  pendingDecisions  String?  @map("pending_decisions")
+  freeformContext       String?   @map("freeform_context")
+  timezone              String?   @map("timezone")
+  coreChatSessionStart  DateTime? @map("core_chat_session_start")
+  lastSessionRecap      String?   @map("last_session_recap")
+  lastSessionRecapFor   DateTime? @map("last_session_recap_for")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_contexts")
+}
+
+model PersonaDocument {
+  id         String   @id @default(uuid())
+  personaId  String   @map("persona_id")
+  userId     String   @map("user_id")
+  filename   String
+  fileSize   Int      @map("file_size")
+  chunkCount Int      @default(0) @map("chunk_count")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  persona Persona @relation(fields: [personaId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chunks  DocumentChunk[]
+
+  @@map("persona_documents")
+}
+
+model DocumentChunk {
+  id         String   @id @default(uuid())
+  documentId String   @map("document_id")
+  personaId  String   @map("persona_id")
+  content    String
+  chunkIndex Int      @map("chunk_index")
+  embedding  Unsupported("vector(1536)")?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  document PersonaDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@map("document_chunks")
+}
+
+model CoreChatMessage {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  role      String   // 'user' or 'assistant'
+  content   String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("core_chat_messages")
+}
+
+// =========================================================================
+// Life Wheel — 6 dimensions tracked via weekly self-ratings + passive signals
+// Dimensions (frozen): health | financial | career | intellectual | relationships | purpose
+// =========================================================================
+
+model DimensionRating {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  dimension  String   // one of the 6 frozen codes
+  score      Int      // 1..10
+  source     String   // "self" | "observed"
+  note       String?
+  weekStart  DateTime @db.Date @map("week_start") // Monday of the ISO week
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, dimension, source, weekStart])
+  @@index([userId, weekStart])
+  @@map("dimension_ratings")
+}
+
+model DimensionSignal {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  dimension  String   // one of the 6 frozen codes
+  valence    Int      // -3..+3 (negative = drained, positive = nourished)
+  source     String   // "core_chat" | "check_in" | "action" | "ritual" | "tension"
+  sourceId   String?  @map("source_id")
+  summary    String?
+  weekStart  DateTime @db.Date @map("week_start")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, weekStart])
+  @@index([userId, dimension, createdAt])
+  @@map("dimension_signals")
+}
+
+model RelationshipPerson {
+  id                 String    @id @default(uuid())
+  userId             String    @map("user_id")
+  name               String
+  relationship       String    // Parent, Friend, Colleague, Partner, Sibling, Mentor, etc.
+  description        String?   // Who they are, personality traits
+  dynamic            String?   // Your dynamic with them
+  keyContext         String?   @map("key_context") // Their job, interests, values, recent events
+  communicationStyle String?   @map("communication_style") // How they communicate
+  loveLanguage       String?   @map("love_language") // words_of_affirmation, acts_of_service, receiving_gifts, quality_time, physical_touch
+  linkedPersonaId    String?   @map("linked_persona_id") // If a persona was created from this person
+  linkedUserId       String?   @map("linked_user_id") // If this person is also a registered 4Ever user (authoritative link, avoids fuzzy name matching)
+  phoneNumber        String?   @map("phone_number") // Phone number for resolving 4Ever account (with or without +91 country code)
+  isActive           Boolean   @default(true) @map("is_active")
+  lastInteractionAt  DateTime? @map("last_interaction_at") // Last time user mentioned this person
+  interactionCount   Int       @default(0) @map("interaction_count") // Total logged interactions
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  user  User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notes RelationshipNote[]
+  rituals RelationshipRitual[]
+  lifeEvents LifeEvent[]
+  tensions TensionEntry[]
+
+  @@map("relationship_persons")
+}
+
+model RelationshipNote {
+  id        String   @id @default(uuid())
+  personId  String   @map("person_id")
+  content   String
+  source    String   @default("manual") // "manual" or "core_chat"
+  sentiment String?  // "positive", "neutral", "negative"
+  topic     String?  // Auto-detected topic (career, family, conflict, support, casual, etc.)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  person    RelationshipPerson         @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  @@index([personId, createdAt])
+  @@map("relationship_notes")
+}
+
+model RelationshipRitual {
+  id          String    @id @default(uuid())
+  userId      String    @map("user_id")
+  personId    String?   @map("person_id")
+  title       String
+  frequency   String    // daily, weekly, biweekly, monthly
+  dayOfWeek   Int?      @map("day_of_week") // 0=Sun..6=Sat, for weekly
+  lastDoneAt  DateTime? @map("last_done_at")
+  streak      Int       @default(0)
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  user   User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  person RelationshipPerson? @relation(fields: [personId], references: [id], onDelete: SetNull)
+
+  @@map("relationship_rituals")
+}
+
+model LifeEvent {
+  id               String   @id @default(uuid())
+  userId           String   @map("user_id")
+  personId         String?  @map("person_id")
+  title            String
+  eventDate        DateTime @map("event_date") @db.Date
+  eventType        String   @map("event_type") // birthday, anniversary, surgery, interview, move, etc.
+  isRecurring      Boolean  @default(false) @map("is_recurring")
+  remindDaysBefore Int      @default(1) @map("remind_days_before")
+  note             String?
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  person    RelationshipPerson?  @relation(fields: [personId], references: [id], onDelete: SetNull)
+
+  @@map("life_events")
+}
+
+model TensionEntry {
+  id           String    @id @default(uuid())
+  userId       String    @map("user_id")
+  personId     String?   @map("person_id")
+  title        String
+  description  String
+  intensity    Int       @default(5)  // 1-10 scale
+  status       String    @default("active") // active, cooling_down, resolved
+  coolDownUntil DateTime? @map("cool_down_until")
+  resolvedAt   DateTime? @map("resolved_at")
+  resolution   String?
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  user   User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  person RelationshipPerson? @relation(fields: [personId], references: [id], onDelete: SetNull)
+
+  @@map("tension_entries")
+}
+
+model PersonaChatMessage {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  personaId String   @map("persona_id")
+  role      String   // "user" or "assistant"
+  content   String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  persona Persona @relation(fields: [personaId], references: [id], onDelete: Cascade)
+
+  @@index([userId, personaId, createdAt])
+  @@map("persona_chat_messages")
+}
+
+model Connection {
+  id          String   @id @default(uuid())
+  requesterId String   @map("requester_id")
+  receiverId  String   @map("receiver_id")
+  status      String   @default("pending") // pending, accepted, rejected, blocked
+  pinnedByRequester  Boolean @default(false) @map("pinned_by_requester")
+  pinnedByReceiver   Boolean @default(false) @map("pinned_by_receiver")
+  mutedByRequester   DateTime? @map("muted_by_requester")
+  mutedByReceiver    DateTime? @map("muted_by_receiver")
+  archivedByRequester Boolean @default(false) @map("archived_by_requester")
+  archivedByReceiver  Boolean @default(false) @map("archived_by_receiver")
+  triChatEnabledByRequester Boolean @default(true) @map("tri_chat_enabled_by_requester")
+  triChatEnabledByReceiver  Boolean @default(true) @map("tri_chat_enabled_by_receiver")
+  // Per-user cleared-at timestamps. When set, that user no longer sees
+  // messages with createdAt <= this timestamp. The other party keeps their
+  // full view untouched. One-sided, non-destructive.
+  triChatClearedAtRequester DateTime? @map("tri_chat_cleared_at_requester")
+  triChatClearedAtRecipient DateTime? @map("tri_chat_cleared_at_recipient")
+  // Auto-generated summary of the conversation up to the most recent clear,
+  // used to keep the mediator's continuity warm after a one-sided clear.
+  triChatClearedSummary     String? @map("tri_chat_cleared_summary") @db.Text
+  // Shared nickname both users see for the mediator in this chat.
+  // Default "4Ever". Either party can rename.
+  mediatorName              String  @default("4Ever") @map("mediator_name") @db.VarChar(40)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  requester User @relation("ConnectionsSent", fields: [requesterId], references: [id], onDelete: Cascade)
+  receiver  User @relation("ConnectionsReceived", fields: [receiverId], references: [id], onDelete: Cascade)
+  mediationSessions MediationSession[]
+
+  @@unique([requesterId, receiverId])
+  @@map("connections")
+}
+
+model DirectMessage {
+  id         String   @id @default(uuid())
+  senderId   String   @map("sender_id")
+  receiverId String   @map("receiver_id")
+  content    String
+  isRead     Boolean  @default(false) @map("is_read")
+  status     String   @default("sent") // sent, delivered, read
+  replyToId  String?  @map("reply_to_id")
+  editedAt   DateTime? @map("edited_at")
+  deletedAt  DateTime? @map("deleted_at")
+  messageType String  @default("text") @map("message_type") // text, image, file, voice, system
+  metadata   String?  // JSON: { fileName, fileSize, mimeType, duration, thumbnailUrl, etc. }
+  mediatorSessionId String? @map("mediator_session_id")
+  mediatorActions   String? @map("mediator_actions") // JSON array of action cards
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  sender    User            @relation("MessagesSent", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver  User            @relation("MessagesReceived", fields: [receiverId], references: [id], onDelete: Cascade)
+  replyTo   DirectMessage?  @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies   DirectMessage[] @relation("MessageReplies")
+  reactions MessageReaction[]
+
+  @@index([senderId, receiverId, createdAt])
+  @@index([replyToId])
+  @@index([mediatorSessionId])
+  @@map("direct_messages")
+}
+
+model MediationSession {
+  id              String    @id @default(uuid())
+  connectionId    String    @map("connection_id")
+  startedByUserId String    @map("started_by_user_id")
+  style           String    @default("neutral")
+  status          String    @default("active") // active | ended
+  summary         String?
+  topic           String?
+  startedAt       DateTime  @default(now()) @map("started_at")
+  endedAt         DateTime? @map("ended_at")
+  lastTurnAt      DateTime  @default(now()) @map("last_turn_at")
+
+  connection Connection       @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  events     MediationEvent[]
+
+  @@index([connectionId, startedAt])
+  @@map("mediation_sessions")
+}
+
+model MediationEvent {
+  id         String   @id @default(uuid())
+  sessionId  String   @map("session_id")
+  eventType  String   @map("event_type") // suggested_ritual | suggested_task | suggested_tension | agreement
+  payload    String   // JSON string
+  acceptedBy String?  @map("accepted_by")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  session MediationSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@map("mediation_events")
+}
+
+model MessageReaction {
+  id        String   @id @default(uuid())
+  messageId String   @map("message_id")
+  userId    String   @map("user_id")
+  emoji     String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  message DirectMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
+  @@map("message_reactions")
+}
+
+model SharedNote {
+  id           String   @id @default(uuid())
+  connectionId String   @map("connection_id")
+  authorId     String   @map("author_id")
+  content      String
+  noteType     String   @default("general") // general, ritual_log, milestone, memory
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  author    User                 @relation("SharedNotesAuthored", fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@map("shared_notes")
+}
+
+model CoreChatSummary {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  sessionStart DateTime @map("session_start")
+  sessionEnd   DateTime @map("session_end")
+  summary      String
+  messageCount Int      @map("message_count")
+  keyTopics    String?  @map("key_topics")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  user      User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("core_chat_summaries")
+}
+
+model ProfileChangeLog {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  field     String
+  oldValue  String?  @map("old_value")
+  newValue  String   @map("new_value")
+  source    String   // core_chat | manual | thought_analysis
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("profile_change_logs")
+}
+
+model OntologyEvent {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  domain    String
+  eventType String   @map("event_type")
+  scopeId   String?  @map("scope_id")
+  payload   String   @default("{}")
+  processed Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, domain, processed])
+  @@index([userId, createdAt])
+  @@map("ontology_events")
+}
+
+model OntologySnapshot {
+  id             String   @id @default(uuid())
+  userId         String   @map("user_id")
+  domain         String
+  scopeId        String   @default("") @map("scope_id")
+  version        Int      @default(1)
+  data           String   @default("{}")
+  confidence     Float    @default(0.5)
+  synthesizedAt  DateTime @default(now()) @map("synthesized_at")
+  sourceEventIds String?  @map("source_event_ids")
+
+  @@unique([userId, domain, scopeId])
+  @@index([userId, domain])
+  @@map("ontology_snapshots")
+}
+
+model OtpCode {
+  id          String   @id @default(uuid())
+  phoneNumber String   @map("phone_number")
+  code        String
+  expiresAt   DateTime @map("expires_at")
+  attempts    Int      @default(0)
+  verified    Boolean  @default(false)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([phoneNumber, code])
+  @@map("otp_codes")
+}
+
+// =========================================================================
+// Knowledge Worker (premium) — parallel to Core Chat, fully isolated.
+// =========================================================================
+
+model KwConversation {
+  id             String   @id @default(uuid())
+  userId         String   @map("user_id")
+  title          String   @default("New conversation")
+  e2bSandboxId   String?  @map("e2b_sandbox_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  user     User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages KwMessage[]
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("kw_conversations")
+}
+
+model KwMessage {
+  id             String   @id @default(uuid())
+  conversationId String   @map("conversation_id")
+  role           String   // "user" | "assistant" | "tool" | "system"
+  content        String
+  toolName       String?  @map("tool_name")
+  toolCalls      Json?    @map("tool_calls")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  conversation KwConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@map("kw_messages")
+}
+
+model KwDocument {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  filename    String
+  mimeType    String   @map("mime_type")
+  fileSize    Int      @map("file_size")
+  chunkCount  Int      @default(0) @map("chunk_count")
+  storagePath String   @map("storage_path") // local filesystem path or R2 key
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("kw_documents")
+}
+
+// kw_document_chunks (managed outside Prisma because of the vector(1536) column;
+// raw SQL in the migration creates it with pgvector). Prisma never reads its rows
+// via the typed client — the KW services use $queryRaw / $executeRaw directly,
+// the same way the Core Chat memory uses document_chunks.

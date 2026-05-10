@@ -1,0 +1,53 @@
+{
+  "expo": {
+    "name": "4Ever",
+    "slug": "4ever-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-font",
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow 4Ever to access your photos so you can set a profile picture.",
+          "cameraPermission": "Allow 4Ever to use the camera so you can take a profile picture."
+        }
+      ],
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "Allow 4Ever to access your contacts so you can add people to your Circle."
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Allow 4Ever to access your microphone so you can talk with Core."
+        }
+      ]
+    ]
+  }
+}
