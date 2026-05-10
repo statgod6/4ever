@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
@@ -28,7 +29,19 @@ import { AdminModule } from './admin/admin.module';
     ConfigModule.forRoot({
       isGlobal: true,
     }),
-    ThrottlerModule.forRoot([{ ttl: 60000, limit: 30 }]),
+    // ScheduleModule enables @Cron decorators (used for OTP cleanup, future
+    // subscription renewals, memory decay, etc.). Must be forRoot() once.
+    ScheduleModule.forRoot(),
+    // Named throttler buckets — @Throttle decorators can reference these by
+    // name to layer multiple rate limits (e.g. short-window + long-window).
+    //   default    — global fallback for any route without its own @Throttle
+    //   auth_short — tight per-minute limit for OTP / login endpoints
+    //   auth_long  — anti-enumeration 15-min window
+    ThrottlerModule.forRoot([
+      { name: 'default', ttl: 60_000, limit: 30 },
+      { name: 'auth_short', ttl: 60_000, limit: 3 },
+      { name: 'auth_long', ttl: 900_000, limit: 10 },
+    ]),
     PrismaModule,
     AuthModule,
     UsersModule,

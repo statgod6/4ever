@@ -1,6 +1,7 @@
 import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -176,11 +177,18 @@ export class AuthService {
   }
 
   /**
-   * Cleanup expired OTPs (can be called via cron or manually).
+   * Cleanup expired OTPs. Runs automatically every hour via @Cron (see
+   * ScheduleModule.forRoot() in AppModule) and can also be invoked manually
+   * from admin tooling or tests.
    */
+  @Cron(CronExpression.EVERY_HOUR)
   async cleanupExpiredOtps() {
-    await this.prisma.otpCode.deleteMany({
+    const result = await this.prisma.otpCode.deleteMany({
       where: { expiresAt: { lt: new Date() } },
     });
+    if (result.count > 0 && process.env.NODE_ENV !== 'production') {
+      console.log(`[OTP cleanup] removed ${result.count} expired codes`);
+    }
+    return result;
   }
 }
