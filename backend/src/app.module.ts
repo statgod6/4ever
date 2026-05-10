@@ -28,6 +28,7 @@ import { AdminModule } from './admin/admin.module';
 import { UsageModule } from './usage/usage.module';
 import { ConsentModule } from './consent/consent.module';
 import { HealthModule } from './health/health.module';
+import { SupportModule } from './support/support.module';
 
 @Module({
   imports: [
@@ -156,6 +157,7 @@ import { HealthModule } from './health/health.module';
     UsageModule,
     ConsentModule,
     HealthModule,
+    SupportModule,
   ],
   providers: [
     {

@@ -17,6 +17,7 @@ import { useTheme } from '../contexts/ThemeContext'
 import { useAuthStore } from '../store/authStore'
 import { authApi } from '../api/auth'
 import { consentApi, ConsentKind } from '../api/consent'
+import { supportApi, SupportCategory } from '../api/support'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 
 type Props = NativeStackScreenProps<any, 'PrivacyData'>
@@ -48,6 +49,40 @@ export default function PrivacyDataScreen({ navigation }: Props) {
     ReturnType<typeof consentApi.getStatus>
   > | null>(null)
   const [consentLoading, setConsentLoading] = React.useState(true)
+
+  // Support / abuse report inline form state.
+  const [supportCategory, setSupportCategory] = React.useState<SupportCategory>('bug')
+  const [supportMessage, setSupportMessage] = React.useState('')
+  const [submittingReport, setSubmittingReport] = React.useState(false)
+
+  const handleSubmitReport = async () => {
+    const msg = supportMessage.trim()
+    if (msg.length < 10) {
+      Alert.alert('Too short', 'Please describe the problem in at least 10 characters.')
+      return
+    }
+    setSubmittingReport(true)
+    try {
+      const res = await supportApi.report({ category: supportCategory, message: msg })
+      setSupportMessage('')
+      Alert.alert('Thanks', res.message)
+    } catch (err: any) {
+      const status = err?.response?.status
+      if (status === 429) {
+        Alert.alert('Please wait', 'You can submit up to 3 reports per hour.')
+      } else {
+        Alert.alert('Could not send', err?.response?.data?.message || err?.message || 'Try again in a moment.')
+      }
+    } finally {
+      setSubmittingReport(false)
+    }
+  }
+
+  const handleEmailSupport = () => {
+    Linking.openURL('mailto:support@4ever.app?subject=4Ever%20support%20request').catch(() => {
+      Alert.alert('No email app', 'Please email support@4ever.app directly.')
+    })
+  }
 
   // ─── Consent status ───────────────────────────────────────────────────────
   const loadConsent = React.useCallback(async () => {
@@ -263,6 +298,66 @@ export default function PrivacyDataScreen({ navigation }: Props) {
       </View>
 
       {/* ─── Delete ──────────────────────────────────────────────────── */}
+      {/* Contact & report */}
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Contact &amp; report</Text>
+        <Text style={styles.cardDesc}>
+          Email us directly, or file a report below for bugs, abusive content, or privacy concerns.
+          Limited to 3 reports per hour.
+        </Text>
+
+        <TouchableOpacity style={styles.secondaryBtn} onPress={handleEmailSupport}>
+          <Text style={styles.secondaryBtnText}>Email support@4ever.app</Text>
+        </TouchableOpacity>
+
+        <Text style={styles.reportLabel}>Category</Text>
+        <View style={styles.categoryRow}>
+          {(['bug', 'abuse', 'privacy', 'feature', 'other'] as SupportCategory[]).map((c) => (
+            <TouchableOpacity
+              key={c}
+              onPress={() => setSupportCategory(c)}
+              style={[styles.categoryChip, supportCategory === c && styles.categoryChipActive]}
+            >
+              <Text
+                style={[
+                  styles.categoryChipText,
+                  supportCategory === c && styles.categoryChipTextActive,
+                ]}
+              >
+                {c}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <TextInput
+          style={styles.reportInput}
+          value={supportMessage}
+          onChangeText={setSupportMessage}
+          placeholder="Describe the issue..."
+          placeholderTextColor={colors.textMuted}
+          multiline
+          numberOfLines={4}
+          maxLength={4000}
+          textAlignVertical="top"
+        />
+
+        <TouchableOpacity
+          style={[
+            styles.primaryBtn,
+            (submittingReport || supportMessage.trim().length < 10) && styles.btnDisabled,
+          ]}
+          onPress={handleSubmitReport}
+          disabled={submittingReport || supportMessage.trim().length < 10}
+        >
+          {submittingReport ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.primaryBtnText}>Submit report</Text>
+          )}
+        </TouchableOpacity>
+      </View>
+
       <View style={[styles.card, styles.dangerCard]}>
         <Text style={styles.cardTitle}>Delete my account</Text>
         <Text style={styles.cardDesc}>
@@ -395,4 +490,39 @@ const createStyles = (colors: any, isDark: boolean) =>
     consentSub: { fontSize: FontSize.xs, color: colors.textMuted, marginTop: 2 },
     consentDot: { fontSize: 18, marginLeft: Spacing.md },
     link: { fontSize: FontSize.sm, fontWeight: '600', color: colors.primary[500] },
+    reportLabel: {
+      fontSize: FontSize.sm,
+      fontWeight: '600',
+      color: colors.textSecondary,
+      marginTop: Spacing.md,
+      marginBottom: Spacing.sm,
+    },
+    categoryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm as any, marginBottom: Spacing.md },
+    categoryChip: {
+      paddingVertical: Spacing.sm,
+      paddingHorizontal: Spacing.md,
+      borderRadius: BorderRadius.lg,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: 'transparent',
+      marginRight: Spacing.sm,
+      marginBottom: Spacing.sm,
+    },
+    categoryChipActive: {
+      borderColor: colors.primary[500],
+      backgroundColor: isDark ? colors.primary[500] + '22' : colors.primary[500] + '15',
+    },
+    categoryChipText: { fontSize: FontSize.sm, color: colors.textSecondary, textTransform: 'capitalize' },
+    categoryChipTextActive: { color: colors.primary[500], fontWeight: '600' },
+    reportInput: {
+      minHeight: 96,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: BorderRadius.lg,
+      padding: Spacing.md,
+      color: colors.text,
+      fontSize: FontSize.base,
+      marginBottom: Spacing.md,
+      backgroundColor: isDark ? colors.card : '#fff',
+    },
   })
