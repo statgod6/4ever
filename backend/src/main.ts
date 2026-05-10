@@ -1,17 +1,23 @@
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
-import { ValidationPipe, Logger } from '@nestjs/common';
+import { ValidationPipe } from '@nestjs/common';
 import { json, urlencoded } from 'express';
 import helmet from 'helmet';
 import * as compression from 'compression';
 import { join } from 'path';
+import { Logger as PinoLogger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
-    // Keep default Nest logger; replaced by Pino later (P4).
-    bufferLogs: false,
+    // Buffer early logs until Pino is wired in as the app logger below.
+    bufferLogs: true,
   });
+
+  // Swap Nest's default logger for Pino so every log line — including those
+  // emitted by framework internals, guards, pipes, and service classes using
+  // the standard Nest Logger — flows through our redaction + JSON pipeline.
+  app.useLogger(app.get(PinoLogger));
 
   const isProd = process.env.NODE_ENV === 'production';
 
@@ -90,7 +96,11 @@ async function bootstrap() {
 
   const port = Number(process.env.PORT) || 3001;
   await app.listen(port);
-  Logger.log(`4Ever API listening on http://localhost:${port} (env=${process.env.NODE_ENV || 'development'})`, 'Bootstrap');
+  const logger = app.get(PinoLogger);
+  logger.log(
+    `4Ever API listening on http://localhost:${port} (env=${process.env.NODE_ENV || 'development'})`,
+    'Bootstrap',
+  );
 }
 bootstrap().catch((err) => {
   // eslint-disable-next-line no-console
