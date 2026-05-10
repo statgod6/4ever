@@ -1,9 +1,16 @@
 import { Controller, Post, Get, Put, Delete, Body, Param, Query, UseGuards, Request, Res, UploadedFile, UseInterceptors, HttpException, HttpStatus } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
 import { OrchestrationService } from './orchestration.service';
 import { MemoryConsolidationService } from './memory-consolidation.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+
+// LLM-heavy endpoint throttles. These are IP-based via the default
+// ThrottlerGuard; P3 replaces them with per-user quota enforcement backed by
+// the LlmUsage table.
+const LLM_HEAVY = { default: { ttl: 60_000, limit: 10 } } as const;
+const LLM_MEDIUM = { default: { ttl: 60_000, limit: 20 } } as const;
 
 @Controller('orchestration')
 @UseGuards(JwtAuthGuard)
@@ -13,6 +20,7 @@ export class OrchestrationController {
     private memoryConsolidation: MemoryConsolidationService,
   ) {}
 
+  @Throttle(LLM_HEAVY)
   @Post('analyze')
   async analyzeThought(
     @Body('thoughtId') thoughtId: string,
@@ -26,6 +34,7 @@ export class OrchestrationController {
     );
   }
 
+  @Throttle(LLM_MEDIUM)
   @Post('reply-persona')
   async replyToPersona(
     @Body('thoughtId') thoughtId: string,
@@ -41,6 +50,7 @@ export class OrchestrationController {
     );
   }
 
+  @Throttle(LLM_MEDIUM)
   @Post('reply-persona/stream')
   async replyToPersonaStream(
     @Body('thoughtId') thoughtId: string,
@@ -74,6 +84,7 @@ export class OrchestrationController {
     res.end();
   }
 
+  @Throttle(LLM_MEDIUM)
   @Post('quick-chat')
   async quickChat(
     @Body('message') message: string,

@@ -13,21 +13,23 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
 import * as fs from 'fs';
 import * as path from 'path';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PremiumGuard } from '../auth/premium.guard';
 import { KnowledgeWorkerService } from './knowledge-worker.service';
 import { DocumentExtractionService } from './services/document-extraction.service';
 import { KwStreamDto } from './dto/kw-stream.dto';
 
 /**
- * Knowledge Worker endpoints — available to all authenticated users.
+ * Knowledge Worker endpoints — gated to premium subscribers.
  * Mirrors the SSE streaming contract used by /orchestration/core-chat/stream.
  */
 @Controller('knowledge-worker')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PremiumGuard)
 export class KnowledgeWorkerController {
   constructor(
     private kw: KnowledgeWorkerService,
@@ -51,6 +53,7 @@ export class KnowledgeWorkerController {
     return this.kw.deleteConversation(req.user.userId, id);
   }
 
+  @Throttle({ default: { ttl: 60000, limit: 10 } })
   @Post('stream')
   async stream(@Body() body: KwStreamDto, @Request() req, @Res() res: Response) {
     res.setHeader('Content-Type', 'text/event-stream');
