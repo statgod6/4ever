@@ -166,6 +166,43 @@ export class AuthService {
   }
 
   /**
+   * Verify an OTP code without minting a JWT — used for high-risk actions
+   * that require re-authentication (account deletion, future subscription
+   * cancellations, etc.). Throws the same errors as verifyOtp so callers
+   * get consistent UX. Does NOT create a user: the caller must already be
+   * authenticated and pass in their own phone number.
+   */
+  async verifyOtpForAction(phoneNumber: string, code: string): Promise<{ verified: true }> {
+    const normalized = this.normalizePhone(phoneNumber);
+    const otpRecord = await this.prisma.otpCode.findFirst({
+      where: {
+        phoneNumber: normalized,
+        verified: false,
+        expiresAt: { gte: new Date() },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!otpRecord) {
+      throw new UnauthorizedException('No valid OTP found. Please request a new one.');
+    }
+    if (otpRecord.attempts >= 3) {
+      throw new UnauthorizedException('Too many failed attempts. Please request a new OTP.');
+    }
+    if (otpRecord.code !== code) {
+      await this.prisma.otpCode.update({
+        where: { id: otpRecord.id },
+        data: { attempts: { increment: 1 } },
+      });
+      throw new UnauthorizedException('Invalid OTP code.');
+    }
+    await this.prisma.otpCode.update({
+      where: { id: otpRecord.id },
+      data: { verified: true },
+    });
+    return { verified: true };
+  }
+
+  /**
    * Normalize phone number: ensure it starts with + and strip spaces/dashes.
    */
   private normalizePhone(phone: string): string {

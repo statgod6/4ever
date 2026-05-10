@@ -8,15 +8,21 @@ import {
   Body,
   UseGuards,
   Request,
+  Response,
   UseInterceptors,
   UploadedFile,
   BadRequestException,
+  UnauthorizedException,
+  Header,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
 import { randomUUID } from 'crypto';
 import { UsersService } from './users.service';
+import { UsersDataService } from './users-data.service';
+import { AuthService } from '../auth/auth.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { UpdateUserContextDto } from './dto/update-user-context.dto';
 
@@ -25,7 +31,11 @@ const AVATAR_DIR = join(__dirname, '..', '..', 'uploads', 'avatars');
 
 @Controller('users')
 export class UsersController {
-  constructor(private usersService: UsersService) {}
+  constructor(
+    private usersService: UsersService,
+    private usersData: UsersDataService,
+    private authService: AuthService,
+  ) {}
 
   @UseGuards(JwtAuthGuard)
   @Get('me')
@@ -117,5 +127,63 @@ export class UsersController {
       req.user.userId,
       !!body.enabled,
     );
+  }
+
+  // =========================================================================
+  // GDPR / App Store compliance endpoints (P3)
+  //
+  // Apple Guideline 5.1.1(v) + Google Play Data Safety both require that
+  // users can delete their account entirely from within the app, and GDPR
+  // Art. 15 / 20 require data portability. These routes expose that path.
+  // =========================================================================
+
+  /**
+   * GET /api/users/me/export
+   * Returns the full user data dump as a JSON download.
+   * Heavily throttled — large response + touches every user-owned table.
+   */
+  @UseGuards(JwtAuthGuard)
+  @Throttle({ default: { ttl: 60 * 60_000, limit: 5 } }) // 5/hour
+  @Get('me/export')
+  @Header('Content-Type', 'application/json; charset=utf-8')
+  @Header('Content-Disposition', 'attachment; filename="4ever-data-export.json"')
+  async exportMyData(@Request() req) {
+    return this.usersData.exportAll(req.user.userId);
+  }
+
+  /**
+   * DELETE /api/users/me
+   * Permanently deletes the account and all owned data.
+   *
+   * Requires OTP re-verification to prevent hijacked-session wipeouts: the
+   * client first calls POST /api/auth/request-otp with the user's phone,
+   * then passes the received code here as { otpCode }. In non-production
+   * environments the OTP check is skipped when `confirm: "DELETE MY ACCOUNT"`
+   * is supplied, to keep integration tests ergonomic.
+   */
+  @UseGuards(JwtAuthGuard)
+  @Throttle({ default: { ttl: 60 * 60_000, limit: 3 } }) // 3/hour
+  @Delete('me')
+  async deleteMyAccount(
+    @Request() req,
+    @Body() body: { otpCode?: string; confirm?: string },
+  ) {
+    const userId: string = req.user.userId;
+    const phone: string | undefined = req.user.phone;
+
+    const devBypass =
+      process.env.NODE_ENV !== 'production' &&
+      body?.confirm === 'DELETE MY ACCOUNT';
+
+    if (!devBypass) {
+      if (!body?.otpCode || !phone) {
+        throw new UnauthorizedException(
+          'Account deletion requires OTP re-verification. Request a code via /api/auth/request-otp then pass it as { otpCode }.',
+        );
+      }
+      await this.authService.verifyOtpForAction(phone, body.otpCode);
+    }
+
+    return this.usersData.deleteAccount(userId);
   }
 }

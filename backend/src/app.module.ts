@@ -24,6 +24,7 @@ import { MessagingModule } from './messaging/messaging.module';
 import { KnowledgeWorkerModule } from './knowledge-worker/knowledge-worker.module';
 import { AdminModule } from './admin/admin.module';
 import { UsageModule } from './usage/usage.module';
+import { ConsentModule } from './consent/consent.module';
 
 @Module({
   imports: [
@@ -64,6 +65,7 @@ import { UsageModule } from './usage/usage.module';
     KnowledgeWorkerModule,
     AdminModule,
     UsageModule,
+    ConsentModule,
   ],
   providers: [
     {
