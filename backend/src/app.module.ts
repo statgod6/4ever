@@ -23,6 +23,7 @@ import { DimensionsModule } from './dimensions/dimensions.module';
 import { MessagingModule } from './messaging/messaging.module';
 import { KnowledgeWorkerModule } from './knowledge-worker/knowledge-worker.module';
 import { AdminModule } from './admin/admin.module';
+import { UsageModule } from './usage/usage.module';
 
 @Module({
   imports: [
@@ -62,6 +63,7 @@ import { AdminModule } from './admin/admin.module';
     MessagingModule,
     KnowledgeWorkerModule,
     AdminModule,
+    UsageModule,
   ],
   providers: [
     {

@@ -23,6 +23,7 @@ import { PremiumGuard } from '../auth/premium.guard';
 import { KnowledgeWorkerService } from './knowledge-worker.service';
 import { DocumentExtractionService } from './services/document-extraction.service';
 import { KwStreamDto } from './dto/kw-stream.dto';
+import { UsageService } from '../usage/usage.service';
 
 /**
  * Knowledge Worker endpoints — gated to premium subscribers.
@@ -34,6 +35,7 @@ export class KnowledgeWorkerController {
   constructor(
     private kw: KnowledgeWorkerService,
     private docs: DocumentExtractionService,
+    private usage: UsageService,
   ) {}
 
   // ───────── Conversations ─────────
@@ -56,6 +58,11 @@ export class KnowledgeWorkerController {
   @Throttle({ default: { ttl: 60000, limit: 10 } })
   @Post('stream')
   async stream(@Body() body: KwStreamDto, @Request() req, @Res() res: Response) {
+    // Enforce monthly token cap before opening the (expensive) KW pipeline.
+    // PremiumGuard already blocked free-tier callers; this stops a premium
+    // user from burning through unbounded OpenRouter spend in one afternoon.
+    await this.usage.checkQuota(req.user.userId);
+
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');

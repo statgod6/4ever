@@ -57,6 +57,10 @@ model User {
   dimensionRatings    DimensionRating[]
   dimensionSignals    DimensionSignal[]
 
+  // Cost-control telemetry (P3)
+  llmUsageRecords     LlmUsage[]
+  tokenQuota          TokenQuota?
+
   @@map("users")
 }
 
@@ -752,3 +756,52 @@ model KwDocument {
 // raw SQL in the migration creates it with pgvector). Prisma never reads its rows
 // via the typed client — the KW services use $queryRaw / $executeRaw directly,
 // the same way the Core Chat memory uses document_chunks.
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Cost-control & quota enforcement (P3)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Per-request log of every LLM / TTS call. Powers admin dashboards, anomaly
+/// detection, and the rolling-window quota enforcement in UsageService.
+/// Written fire-and-forget so logging never blocks a user response.
+model LlmUsage {
+  id               String   @id @default(uuid())
+  userId           String   @map("user_id")
+  endpoint         String   // core_chat_stream | core_chat | kw_stream | tts | quick_chat | reply_persona | mediator | ontology_synth | memory_consolidation | embedding
+  provider         String   @default("openrouter")
+  model            String   // e.g. deepseek/deepseek-v3.2
+  promptTokens     Int      @default(0) @map("prompt_tokens")
+  completionTokens Int      @default(0) @map("completion_tokens")
+  totalTokens      Int      @default(0) @map("total_tokens")
+  estimatedCostUsd Decimal  @default(0) @map("estimated_cost_usd") @db.Decimal(12, 6)
+  success          Boolean  @default(true)
+  errorCode        String?  @map("error_code")
+  latencyMs        Int?     @map("latency_ms")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, endpoint, createdAt])
+  @@index([createdAt])
+  @@map("llm_usage")
+}
+
+/// Rolling monthly token quota per user. Reset logic runs in UsageService
+/// (compares periodStart to current month boundary). monthlyTokenCap defaults
+/// track the subscriptionTier but can be overridden per-user for VIPs or bans.
+model TokenQuota {
+  id               String   @id @default(uuid())
+  userId           String   @unique @map("user_id")
+  monthlyTokenCap  Int      @default(200000) @map("monthly_token_cap")
+  tokensUsedPeriod Int      @default(0) @map("tokens_used_period")
+  periodStart      DateTime @default(now()) @map("period_start")
+  lastResetAt      DateTime @default(now()) @map("last_reset_at")
+  hardLocked       Boolean  @default(false) @map("hard_locked") // manual kill switch for abusers
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("token_quotas")
+}

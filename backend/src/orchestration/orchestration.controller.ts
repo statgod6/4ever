@@ -5,10 +5,12 @@ import { Response } from 'express';
 import { OrchestrationService } from './orchestration.service';
 import { MemoryConsolidationService } from './memory-consolidation.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { UsageService } from '../usage/usage.service';
 
 // LLM-heavy endpoint throttles. These are IP-based via the default
-// ThrottlerGuard; P3 replaces them with per-user quota enforcement backed by
-// the LlmUsage table.
+// ThrottlerGuard and act as a first line of defense. UsageService.checkQuota
+// (called inside each handler) provides the per-user monthly cap so a single
+// authenticated user cannot bleed our OpenRouter budget dry.
 const LLM_HEAVY = { default: { ttl: 60_000, limit: 10 } } as const;
 const LLM_MEDIUM = { default: { ttl: 60_000, limit: 20 } } as const;
 
@@ -18,6 +20,7 @@ export class OrchestrationController {
   constructor(
     private orchestrationService: OrchestrationService,
     private memoryConsolidation: MemoryConsolidationService,
+    private usage: UsageService,
   ) {}
 
   @Throttle(LLM_HEAVY)
@@ -27,6 +30,7 @@ export class OrchestrationController {
     @Body('personaIds') personaIds: string[],
     @Request() req,
   ) {
+    await this.usage.checkQuota(req.user.userId);
     return this.orchestrationService.analyzeThought(
       req.user.userId,
       thoughtId,
@@ -42,6 +46,7 @@ export class OrchestrationController {
     @Body('message') message: string,
     @Request() req,
   ) {
+    await this.usage.checkQuota(req.user.userId);
     return this.orchestrationService.replyToPersona(
       req.user.userId,
       thoughtId,
@@ -59,6 +64,10 @@ export class OrchestrationController {
     @Request() req,
     @Res() res: Response,
   ) {
+    // Check quota BEFORE opening the SSE stream; a 403 here returns JSON so
+    // the mobile client can surface the upgrade prompt cleanly.
+    await this.usage.checkQuota(req.user.userId);
+
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
@@ -91,6 +100,7 @@ export class OrchestrationController {
     @Body('personaId') personaId: string | undefined,
     @Request() req,
   ) {
+    await this.usage.checkQuota(req.user.userId);
     return this.orchestrationService.quickChat(
       req.user.userId,
       message,
@@ -103,6 +113,7 @@ export class OrchestrationController {
     @Body('message') message: string,
     @Request() req,
   ) {
+    await this.usage.checkQuota(req.user.userId);
     return this.orchestrationService.coreChat(
       req.user.userId,
       message,
@@ -115,6 +126,8 @@ export class OrchestrationController {
     @Request() req,
     @Res() res: Response,
   ) {
+    await this.usage.checkQuota(req.user.userId);
+
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');

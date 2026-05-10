@@ -5,6 +5,7 @@ import { existsSync, unlinkSync } from 'fs';
 import { PrismaService } from '../prisma/prisma.service';
 import { logProfileChange } from '../orchestration/graph/utils/memory-utils';
 import { ONTOLOGY_EVENTS } from '../ontology/events';
+import { UsageService } from '../usage/usage.service';
 
 const USER_PUBLIC_SELECT = {
   id: true,
@@ -19,6 +20,7 @@ export class UsersService {
   constructor(
     private prisma: PrismaService,
     private events: EventEmitter2,
+    private usage: UsageService,
   ) {}
 
   async findById(id: string) {
@@ -30,8 +32,9 @@ export class UsersService {
   }
 
   /**
-   * Returns just the subscription status for premium gating.
-   * Used by /users/me/subscription to power frontend tab visibility.
+   * Returns subscription status + monthly usage quota for premium gating and
+   * the mobile Settings screen. Used by /users/me/subscription to power
+   * frontend tab visibility and upgrade nudges.
    */
   async getSubscription(userId: string) {
     const user = await this.prisma.user.findUnique({
@@ -41,13 +44,29 @@ export class UsersService {
         subscriptionExpiresAt: true,
       },
     });
-    if (!user) return { tier: 'free', expiresAt: null, active: false };
+    if (!user) return { tier: 'free', expiresAt: null, active: false, quota: null as any };
     const tier: string = user.subscriptionTier || 'free';
     const expiresAt: Date | null = user.subscriptionExpiresAt || null;
     const active =
       tier === 'premium' &&
       (!expiresAt || expiresAt.getTime() > Date.now());
-    return { tier, expiresAt, active };
+    // Attach quota so the UI can show a progress bar and preempt the 403.
+    // Best-effort: if UsageService errors, fall back to null quota.
+    let quota: any = null;
+    try {
+      const status = await this.usage.getStatus(userId, tier);
+      quota = {
+        tokensUsed: status.tokensUsed,
+        tokensCap: status.tokensCap,
+        tokensRemaining: status.tokensRemaining,
+        periodStart: status.periodStart,
+        periodEnd: status.periodEnd,
+        overLimit: status.overLimit,
+      };
+    } catch {
+      /* keep quota null, don't break subscription lookup */
+    }
+    return { tier, expiresAt, active, quota };
   }
 
   /**
