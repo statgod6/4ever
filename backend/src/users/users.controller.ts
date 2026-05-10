@@ -15,6 +15,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
+import { randomUUID } from 'crypto';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { UpdateUserContextDto } from './dto/update-user-context.dto';
@@ -51,9 +52,13 @@ export class UsersController {
       storage: diskStorage({
         destination: AVATAR_DIR,
         filename: (req: any, file, cb) => {
-          const userId = req?.user?.userId || 'user';
+          // Use an unguessable UUID instead of the user id. Embedding the user
+          // id in a publicly-fetchable URL enables user-enumeration attacks
+          // and leaks ownership via CDN logs / referer headers.
+          // TODO(P5-storage): replace with HMAC-signed short-lived URLs when
+          // avatars migrate to S3/R2 object storage.
           const ext = extname(file.originalname || '').toLowerCase() || '.jpg';
-          cb(null, `${userId}-${Date.now()}${ext}`);
+          cb(null, `${randomUUID()}${ext}`);
         },
       }),
       limits: { fileSize: 5 * 1024 * 1024 },

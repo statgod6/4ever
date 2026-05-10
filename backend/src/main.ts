@@ -60,9 +60,21 @@ async function bootstrap() {
   app.setGlobalPrefix('api');
 
   // ─── Static uploads (avatars, KW generated assets) ────────────────────────
-  // TODO(P2): replace with signed short-lived URLs to authorize access.
+  // Mobile <Image uri> and browser <a download> cannot attach Authorization
+  // headers, so /uploads is public. Security posture:
+  //   1. Avatar filenames use randomUUID (no user id leak — see users.controller).
+  //   2. KW generated filenames embed server-generated UUIDs and go through an
+  //      explicit controller with filename validation.
+  //   3. Cache-Control: private prevents CDN / shared-cache storage.
+  // TODO(P5-storage): replace local disk with S3/R2 + HMAC-signed URLs so we
+  // can gate every fetch on a short-lived cryptographic token.
   app.useStaticAssets(join(__dirname, '..', 'uploads'), {
     prefix: '/uploads/',
+    setHeaders: (res) => {
+      res.setHeader('Cache-Control', 'private, max-age=86400');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('Content-Security-Policy', "default-src 'none'; img-src 'self' data:");
+    },
   });
 
   // ─── Health check (no auth, bypasses /api prefix) ─────────────────────────
