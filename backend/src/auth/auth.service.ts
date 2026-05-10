@@ -2,6 +2,7 @@ import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -211,6 +212,113 @@ export class AuthService {
       cleaned = '+' + cleaned;
     }
     return cleaned;
+  }
+
+  // ─── Sign in with Apple ────────────────────────────────────────────────────
+  // Apple's JWKS is served at a stable URL and rotates its keys periodically;
+  // `createRemoteJWKSet` caches them and handles refresh automatically.
+  private readonly appleJwks = createRemoteJWKSet(
+    new URL('https://appleid.apple.com/auth/keys'),
+  );
+
+  /**
+   * Sign in with Apple. Accepts the `identityToken` returned by Apple on the
+   * device, verifies it against Apple's public JWKS, and either mints a JWT
+   * for an existing account or creates a new one.
+   *
+   * Security notes:
+   *   - `aud` must match our iOS bundle identifier (APPLE_CLIENT_ID env)
+   *   - `iss` must be `https://appleid.apple.com`
+   *   - `exp` validation is handled by jose automatically
+   *   - `sub` is the stable user identifier; we key on this forever
+   *   - `email` is optional (user may use Apple private relay) and we never
+   *     rely on it for identity — only display.
+   */
+  async signInWithApple(identityToken: string, fullName?: string | null) {
+    if (!identityToken) {
+      throw new BadRequestException('identityToken is required');
+    }
+    const expectedAudience = this.configService.get<string>('APPLE_CLIENT_ID');
+    if (!expectedAudience) {
+      // Fail closed: if server is mis-configured, do not fall back to
+      // "accept any audience" — that would let any Apple-issued token in.
+      throw new UnauthorizedException(
+        'Sign in with Apple is not configured on this server.',
+      );
+    }
+
+    let payload: any;
+    try {
+      const verified = await jwtVerify(identityToken, this.appleJwks, {
+        issuer: 'https://appleid.apple.com',
+        audience: expectedAudience,
+      });
+      payload = verified.payload;
+    } catch (err: any) {
+      throw new UnauthorizedException(
+        `Invalid Apple identity token: ${err?.message || 'verification failed'}`,
+      );
+    }
+
+    const appleSub: string | undefined = payload?.sub;
+    const email: string | undefined = payload?.email;
+    if (!appleSub) {
+      throw new UnauthorizedException('Apple token missing subject');
+    }
+
+    // Look up existing user by Apple id first; fall back to email match so
+    // someone who signed up with phone and later added Apple doesn't end up
+    // with a duplicate account.
+    let user = await this.prisma.user.findUnique({
+      where: { appleUserId: appleSub },
+    });
+    let isNewUser = false;
+
+    if (!user && email) {
+      const byEmail = await this.prisma.user.findFirst({
+        where: { email },
+      });
+      if (byEmail) {
+        user = await this.prisma.user.update({
+          where: { id: byEmail.id },
+          data: { appleUserId: appleSub },
+        });
+      }
+    }
+
+    if (!user) {
+      // Brand new SIWA user. We don't have a phone number yet, so we stash a
+      // deterministic placeholder in the required `phoneNumber` column
+      // (prefixed to avoid collision with real E.164 numbers). The user can
+      // later add a real phone via the OTP flow; at that point we update this
+      // row rather than create a duplicate.
+      user = await this.prisma.user.create({
+        data: {
+          phoneNumber: `apple:${appleSub}`,
+          appleUserId: appleSub,
+          email: email || null,
+          name: (fullName || '').trim(),
+        },
+      });
+      isNewUser = true;
+    }
+
+    const token = this.jwtService.sign({
+      sub: user.id,
+      phone: user.phoneNumber,
+    });
+
+    return {
+      access_token: token,
+      user: {
+        id: user.id,
+        phoneNumber: user.phoneNumber.startsWith('apple:') ? '' : user.phoneNumber,
+        name: user.name,
+        avatarUrl: user.avatarUrl,
+        email: user.email,
+      },
+      isNewUser,
+    };
   }
 
   /**

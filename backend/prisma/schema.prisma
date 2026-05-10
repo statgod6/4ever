@@ -12,6 +12,12 @@ datasource db {
 model User {
   id          String   @id @default(uuid())
   phoneNumber String   @unique @map("phone_number")
+  // Sign in with Apple — stable user identifier from Apple's identity token.
+  // Unique so two users can't claim the same Apple account. Nullable because
+  // phone-OTP-only users never get one. Email is whatever Apple returned (may
+  // be a private-relay alias) and is kept only for account-recovery display.
+  appleUserId String?  @unique @map("apple_user_id")
+  email       String?  @map("email")
   name        String   @default("")
   avatarUrl   String?  @map("avatar_url")
   createdAt   DateTime @default(now()) @map("created_at")

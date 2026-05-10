@@ -5,6 +5,7 @@ import { JwtAuthGuard } from './jwt-auth.guard';
 import { RequestOtpDto } from './dto/request-otp.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { SetNameDto } from './dto/set-name.dto';
+import { AppleSignInDto } from './dto/apple-signin.dto';
 
 // Layered rate limits for OTP endpoints — two buckets stack so attackers
 // can't work around the short-window limit with a slow trickle.
@@ -38,5 +39,20 @@ export class AuthController {
   @Post('set-name')
   async setName(@Request() req, @Body() dto: SetNameDto) {
     return this.authService.setName(req.user.userId, dto.name);
+  }
+
+  /**
+   * POST /auth/apple — Sign in with Apple. Accepts the identityToken from
+   * expo-apple-authentication, verifies it against Apple's JWKS, and returns
+   * the same payload shape as /auth/verify-otp so the mobile client can reuse
+   * the existing session-setup logic.
+   *
+   * Throttled with the same layered buckets as phone OTP because a leaked
+   * Apple token would be equally damaging as a leaked OTP.
+   */
+  @Throttle(AUTH_THROTTLE)
+  @Post('apple')
+  async signInWithApple(@Body() dto: AppleSignInDto) {
+    return this.authService.signInWithApple(dto.identityToken, dto.fullName);
   }
 }

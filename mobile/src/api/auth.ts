@@ -89,6 +89,16 @@ export const authApi = {
   },
 
   /**
+   * Sign in with Apple — exchanges Apple's identity token for our JWT.
+   * iOS-only. The identity token comes from expo-apple-authentication.
+   * Server verifies the token against Apple JWKS and aud=bundle id.
+   */
+  signInWithApple: async (payload: { identityToken: string; fullName?: string | null }) => {
+    const response = await apiClient.post('/auth/apple', payload)
+    return response.data
+  },
+
+  /**
    * Irrevocably delete the user's account and all associated data
    * (cascade deletes thoughts, memories, circle, KW docs, uploaded files, etc).
    * Backend requires OTP re-verification in production; in dev a confirm string

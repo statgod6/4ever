@@ -3,6 +3,7 @@ import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native'
+import * as AppleAuthentication from 'expo-apple-authentication'
 import { useAuthStore } from '../store/authStore'
 import { authApi } from '../api/auth'
 import { Colors, BorderRadius, Spacing, FontSize } from '../constants/colors'
@@ -21,6 +22,7 @@ export default function LoginScreen() {
   const [name, setName] = useState('')
   const [loading, setLoading] = useState(false)
   const [countdown, setCountdown] = useState(0)
+  const [appleAvailable, setAppleAvailable] = useState(false)
   const timerRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined)
   const setAuth = useAuthStore((s) => s.setAuth)
 
@@ -29,6 +31,53 @@ export default function LoginScreen() {
       if (timerRef.current) clearInterval(timerRef.current)
     }
   }, [])
+
+  // Sign in with Apple is iOS-only. App Store guideline 4.8 requires it whenever
+  // third-party sign-in (phone OTP counts) is the only option. We hide the button
+  // entirely on Android and on iOS devices that don't support it (iOS < 13).
+  useEffect(() => {
+    if (Platform.OS !== 'ios') return
+    AppleAuthentication.isAvailableAsync()
+      .then(setAppleAvailable)
+      .catch(() => setAppleAvailable(false))
+  }, [])
+
+  const handleAppleSignIn = async () => {
+    setLoading(true)
+    try {
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      })
+      if (!credential.identityToken) {
+        showToast('Apple did not return an identity token', 'error')
+        return
+      }
+      // fullName is only returned on the very first sign-in per device.
+      const fullName = [credential.fullName?.givenName, credential.fullName?.familyName]
+        .filter(Boolean)
+        .join(' ')
+        .trim() || null
+      const response = await authApi.signInWithApple({
+        identityToken: credential.identityToken,
+        fullName,
+      })
+      await setAuth(response.access_token, response.user)
+      if (response.isNewUser && !response.user?.name) {
+        setStep('name')
+      } else {
+        showToast('Welcome!', 'success')
+      }
+    } catch (err: any) {
+      // User cancelled the native sheet — silently no-op.
+      if (err?.code === 'ERR_REQUEST_CANCELED' || err?.code === 'ERR_CANCELED') return
+      showToast(err?.response?.data?.message || err?.message || 'Apple sign-in failed', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const startCountdown = () => {
     setCountdown(60)
@@ -164,6 +213,27 @@ export default function LoginScreen() {
                   {loading ? 'Sending...' : 'Send Verification Code'}
                 </Text>
               </TouchableOpacity>
+
+              {appleAvailable && (
+                <>
+                  <View style={styles.dividerRow}>
+                    <View style={styles.dividerLine} />
+                    <Text style={styles.dividerText}>or</Text>
+                    <View style={styles.dividerLine} />
+                  </View>
+                  <AppleAuthentication.AppleAuthenticationButton
+                    buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+                    buttonStyle={
+                      isDark
+                        ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE
+                        : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
+                    }
+                    cornerRadius={BorderRadius.md}
+                    style={styles.appleButton}
+                    onPress={handleAppleSignIn}
+                  />
+                </>
+              )}
             </>
           )}
 
@@ -281,4 +351,8 @@ const createStyles = (colors: typeof Colors, isDark: boolean = false) => StyleSh
   linkContainer: { marginTop: Spacing.lg, alignItems: 'center' },
   linkText: { fontSize: FontSize.sm, color: colors.primary[500], fontWeight: '600' },
   changeText: { fontSize: FontSize.sm, color: colors.textSecondary },
+  dividerRow: { flexDirection: 'row', alignItems: 'center', marginTop: Spacing.xl, marginBottom: Spacing.md },
+  dividerLine: { flex: 1, height: 1, backgroundColor: colors.border },
+  dividerText: { marginHorizontal: Spacing.md, fontSize: FontSize.xs, color: colors.textMuted, textTransform: 'uppercase' },
+  appleButton: { width: '100%', height: 48 },
 })

@@ -21,6 +21,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "app.fourever.ios",
       "buildNumber": "1",
+      "usesAppleSignIn": true,
       "requireFullScreen": false,
       "config": {
         "usesNonExemptEncryption": false
@@ -64,6 +65,7 @@
     "plugins": [
       "expo-font",
       "expo-secure-store",
+      "expo-apple-authentication",
       [
         "expo-image-picker",
         {
