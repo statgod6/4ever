@@ -6,7 +6,9 @@ import { createThoughtAnalysisGraph } from './graph/thought-analysis.graph';
 import { invokeWithRetry } from './graph/nodes/run-personas.node';
 import { generateEmbedding } from './graph/utils/embeddings';
 import { storeMemoryWithDedup, trackMemoryAccess, logProfileChange } from './graph/utils/memory-utils';
-import { createCoreChatAgent } from './graph/core-chat-agent';
+import { createCoreChatAgent, getCoreChatToolList } from './graph/core-chat-agent';
+import { PendingActionCreator } from './graph/tools/core-chat-tools';
+import { runCoreChatStreamLoop } from './graph/core-chat-loop';
 import { KnowledgeBaseService } from '../knowledge-base/knowledge-base.service';
 import { MemoryConsolidationService } from './memory-consolidation.service';
 import { OntologyService } from '../ontology/ontology.service';
@@ -14,6 +16,9 @@ import { createActionItemIfNew } from '../actions/action-dedup.util';
 import { formatNowInTz, timeAgo, computeSessionGap, stripLeakedTimePrefix, TimeMeta, GapMeta } from './utils/time.util';
 import { DimensionsService } from '../dimensions/dimensions.service';
 import { LIFE_DIMENSIONS, isValidDimension } from '../dimensions/dimension.constants';
+import { classifyContextScope, ContextScope } from './context-scope';
+import { AgentActionsService } from '../agent-actions/agent-actions.service';
+import { SkillsService } from '../skills/skills.service';
 
 @Injectable()
 export class OrchestrationService implements OnModuleInit {
@@ -31,6 +36,8 @@ export class OrchestrationService implements OnModuleInit {
     private memoryConsolidation: MemoryConsolidationService,
     private ontology: OntologyService,
     private dimensions: DimensionsService,
+    private agentActions: AgentActionsService,
+    private skillsService: SkillsService,
   ) {}
 
   /** Timeout for streaming LLM fetch calls (ms). */
@@ -651,6 +658,8 @@ export class OrchestrationService implements OnModuleInit {
    * events, connections, messages, and shared notes — all in parallel.
    */
   private async buildCoreChatContext(userId: string, message: string): Promise<string[]> {
+    const scope: ContextScope = classifyContextScope(message);
+
     const [
       userContext, recentMemories, completionStats, pendingActions,
       calendarContext, moodContext, recentThoughts, threadSummaries, completedActions,
@@ -659,26 +668,36 @@ export class OrchestrationService implements OnModuleInit {
       sessionSummaries,
       availablePersonas,
     ] = await Promise.all([
+      // Always load user profile
       this.prisma.userContext.findUnique({ where: { userId } }).catch(() => null),
+      // Always load relevant memories (embedding-matched)
       this.fetchRelevantMemories(userId, message).catch(() => null),
-      this.fetchCompletionStatsContext(userId).catch(() => null),
-      this.fetchPendingActionsContext(userId).catch(() => null),
-      this.fetchCalendarContext(userId).catch(() => null),
-      this.fetchMoodContext(userId).catch(() => null),
-      this.fetchRecentThoughtsContext(userId).catch(() => null),
-      this.fetchRecentThreadSummaries(userId).catch(() => null),
-      this.fetchCompletedActionsContext(userId).catch(() => null),
-      this.fetchRelationshipContext(userId).catch(() => null),
-      this.fetchUpcomingEventsContext(userId).catch(() => null),
-      this.fetchConnectionsContext(userId).catch(() => null),
-      this.fetchUnreadMessagesContext(userId).catch(() => null),
-      this.fetchRecentSharedNotesContext(userId).catch(() => null),
+      // Load planner/calendar only for planner scope
+      (scope === 'planner') ? this.fetchCompletionStatsContext(userId).catch(() => null) : null,
+      (scope === 'planner') ? this.fetchPendingActionsContext(userId).catch(() => null) : null,
+      (scope === 'planner') ? this.fetchCalendarContext(userId).catch(() => null) : null,
+      // Mood only for life_review
+      (scope === 'life_review') ? this.fetchMoodContext(userId).catch(() => null) : null,
+      // Thoughts only for memory_recall
+      (scope === 'memory_recall') ? this.fetchRecentThoughtsContext(userId).catch(() => null) : null,
+      (scope === 'memory_recall') ? this.fetchRecentThreadSummaries(userId).catch(() => null) : null,
+      (scope === 'planner') ? this.fetchCompletedActionsContext(userId).catch(() => null) : null,
+      // Relationships only for relationship scope
+      (scope === 'relationship') ? this.fetchRelationshipContext(userId).catch(() => null) : null,
+      (scope === 'relationship') ? this.fetchUpcomingEventsContext(userId).catch(() => null) : null,
+      // Messaging/connections only for messaging scope
+      (scope === 'messaging') ? this.fetchConnectionsContext(userId).catch(() => null) : null,
+      (scope === 'messaging') ? this.fetchUnreadMessagesContext(userId).catch(() => null) : null,
+      (scope === 'messaging') ? this.fetchRecentSharedNotesContext(userId).catch(() => null) : null,
+      // Session summaries always (continuity)
       this.fetchRecentSessionSummaries(userId).catch(() => null),
+      // Personas always
       this.fetchAvailablePersonasContext(userId).catch(() => null),
     ]);
 
-    // Life Wheel snapshot (observed scores + weekly-checkin nudge)
+    // Life Wheel snapshot (observed scores + weekly-checkin nudge) — only for life_review scope
     let lifeWheelContext: string | null = null;
+    if (scope === 'life_review') {
     try {
       const wheel = await this.dimensions.getLifeWheel(userId);
       const lines = wheel.dimensions.map((d) => {
@@ -692,6 +711,7 @@ export class OrchestrationService implements OnModuleInit {
       lifeWheelContext = `Week of ${wheel.weekStart}:\n${lines.join('\n')}${nudge}`;
     } catch (err: any) {
       this.logger.warn(`Life Wheel context fetch failed: ${err?.message || err}`);
+    }
     }
 
     const contextParts: string[] = [];
@@ -1726,11 +1746,19 @@ Example: [{"content": "Draft business proposal by Friday", "dimension": "Career"
     // Gather all user context in parallel
     const contextParts = await this.buildCoreChatContext(userId, message);
 
+    // V0 Skill System — shadow detection (logs matched skills, does not inject)
+    this.skillsService.getRelevantSkillPrompt({ surface: 'core_chat', message });
+
     const timeMeta = formatNowInTz(userTz);
     const systemPrompt = this.buildCoreChatSystemPrompt(contextParts, timeMeta, gapMeta, recap);
 
     try {
       // Create per-request ReAct agent (tools need userId bound)
+      const pendingCreator: PendingActionCreator | undefined =
+        process.env.NODE_ENV === 'production'
+          ? (toolName, payload, riskLevel) =>
+              this.agentActions.createPending(userId, toolName, payload, riskLevel)
+          : undefined;
       const agent = createCoreChatAgent(
         this.prisma,
         userId,
@@ -1738,6 +1766,7 @@ Example: [{"content": "Draft business proposal by Friday", "dimension": "Career"
         this.defaultModel,
         this.tavilyApiKey,
         this.dimensions,
+        pendingCreator,
       );
 
       // Build messages for the agent — prefix each history message with its age
@@ -1888,130 +1917,62 @@ Example: [{"content": "Draft business proposal by Friday", "dimension": "Career"
     // Gather all user context in parallel
     const contextParts = await this.buildCoreChatContext(userId, message);
 
+    // V0 Skill System — shadow detection (logs matched skills, does not inject)
+    this.skillsService.getRelevantSkillPrompt({ surface: 'core_chat', message });
+
     const streamTimeMeta = formatNowInTz(streamUserTz);
     const systemPrompt = this.buildCoreChatSystemPrompt(contextParts, streamTimeMeta, streamGapMeta, streamRecap);
 
     yield { event: 'thinking', data: { status: 'reasoning' } };
 
     try {
-      const agent = createCoreChatAgent(
-        this.prisma, userId, this.openRouterApiKey, this.defaultModel, this.tavilyApiKey, this.dimensions,
+      const streamPendingCreator: PendingActionCreator | undefined =
+        process.env.NODE_ENV === 'production'
+          ? (toolName, payload, riskLevel) =>
+              this.agentActions.createPending(userId, toolName, payload, riskLevel)
+          : undefined;
+      const tools = getCoreChatToolList(
+        this.prisma,
+        userId,
+        this.openRouterApiKey,
+        this.tavilyApiKey,
+        this.dimensions,
+        streamPendingCreator,
       );
 
-      const agentMessages: Array<{ role: string; content: string }> = [
+      const agentMessages: Array<{ role: 'system' | 'user' | 'assistant' | 'tool'; content: string }> = [
         { role: 'system', content: systemPrompt },
         ...history.map((m) => ({
-          role: m.role,
+          role: m.role as 'user' | 'assistant',
           content: `[${timeAgo(m.createdAt)}] ${m.content}`,
         })),
       ];
-
-      // Use streamEvents to get granular tool_start/tool_end + token streaming
-      const stream = agent.streamEvents(
-        { messages: agentMessages },
-        { version: 'v2', recursionLimit: 25 },
-      );
+      // The latest user message is already saved to DB above and included in `history`,
+      // so we do NOT append it again here.
 
       let finalText = '';
-      let streamedText = ''; // Accumulated tokens from current LLM call
-      let isStreaming = false; // Whether we're actively streaming text tokens
 
-      // Detect raw tool-call markup that some models emit as plain text
-      const TOOL_MARKUP_RE = /(<\|?\s*(DSML|function_calls|invoke|parameter)\b|<\/?\s*(function_calls|antml:|tool_call))/i;
+      // Run the streaming ReAct loop. It yields:
+      //   - thinking_delta: reasoning tokens from the thinking model
+      //   - tool_start / tool_end: per tool call lifecycle
+      //   - token / token_reset: visible content streaming
+      //   - response: final assistant text
+      const loop = runCoreChatStreamLoop({
+        apiKey: this.openRouterApiKey,
+        model: this.defaultModel,
+        messages: agentMessages,
+        tools,
+        timeoutMs: this.STREAM_TIMEOUT_MS,
+      });
 
-      for await (const event of stream) {
-        if (event.event === 'on_tool_start') {
-          // If we were streaming text, it was intermediate reasoning — reset
-          if (isStreaming) {
-            streamedText = '';
-            isStreaming = false;
-            // Tell client to discard previously streamed tokens
-            yield { event: 'token_reset', data: {} };
-          }
-          const toolName = event.name || '';
-          const toolInput = event.data?.input || {};
-          yield { event: 'tool_start', data: { tool: toolName, input: toolInput } };
-        } else if (event.event === 'on_tool_end') {
-          const toolName = event.name || '';
-          yield { event: 'tool_end', data: { tool: toolName } };
-        } else if (event.event === 'on_chat_model_stream') {
-          // Token-level streaming: emit each text chunk as it arrives
-          const chunk = event.data?.chunk;
-          if (chunk) {
-            // Skip tool_call structured chunks
-            const hasToolCalls = chunk.tool_calls?.length > 0 || chunk.tool_call_chunks?.length > 0;
-            if (hasToolCalls) continue;
-
-            let text = '';
-            const content = chunk.content;
-            if (typeof content === 'string' && content) {
-              text = content;
-            } else if (Array.isArray(content)) {
-              text = content.filter((p: any) => p.type === 'text' && p.text).map((p: any) => p.text).join('');
-            }
-
-            if (text) {
-              // If the accumulated stream starts looking like raw tool-call markup, stop streaming it
-              const pending = streamedText + text;
-              if (TOOL_MARKUP_RE.test(pending)) {
-                // Discard everything streamed so far — it's tool markup, not user-facing text
-                if (isStreaming) {
-                  yield { event: 'token_reset', data: {} };
-                }
-                streamedText = '';
-                isStreaming = false;
-                continue;
-              }
-              streamedText += text;
-              isStreaming = true;
-              yield { event: 'token', data: { chunk: text } };
-            }
-          }
-        } else if (event.event === 'on_chat_model_end') {
-          // LLM call finished — capture final text for DB save
-          const output = event.data?.output;
-          if (output?.content) {
-            const content = output.content;
-            let extracted = '';
-            if (typeof content === 'string' && content.trim()) {
-              extracted = content;
-            } else if (Array.isArray(content)) {
-              const textParts = content
-                .filter((p: any) => p.type === 'text' && p.text?.trim())
-                .map((p: any) => p.text);
-              if (textParts.length > 0) {
-                extracted = textParts.join('\n');
-              }
-            }
-            if (extracted) {
-              finalText = extracted;
-            }
-          }
-        } else if (event.event === 'on_chain_end' && event.name === 'LangGraph') {
-          // Final fallback: extract from the LangGraph chain end output
-          try {
-            const messages = event.data?.output?.messages;
-            if (Array.isArray(messages) && messages.length > 0) {
-              const lastMsg = [...messages].reverse().find((m: any) => {
-                const c = m?.content || m?.kwargs?.content;
-                if (typeof c === 'string' && c.trim()) return true;
-                if (Array.isArray(c)) return c.some((p: any) => p.type === 'text' && p.text?.trim());
-                return false;
-              });
-              if (lastMsg && !finalText) {
-                const c = lastMsg.content || lastMsg.kwargs?.content;
-                if (typeof c === 'string') finalText = c;
-                else if (Array.isArray(c)) {
-                  finalText = c.filter((p: any) => p.type === 'text' && p.text).map((p: any) => p.text).join('\n');
-                }
-              }
-            }
-          } catch { /* ignore parse errors */ }
+      for await (const event of loop) {
+        if (event.event === 'response') {
+          finalText = event.data?.text || '';
+          continue; // we'll emit our own response event after sanitisation
         }
+        yield event;
       }
 
-      // Use streamed text if we got tokens, otherwise fall back to finalText
-      if (streamedText) finalText = streamedText;
       if (!finalText) {
         finalText = 'I processed your request but couldn\'t generate a response. Please try again.';
       }

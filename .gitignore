@@ -97,3 +97,10 @@ postgres_data/
 expo-qr.png
 *.tgz
 *.bak
+
+# === Temp/staging directories ===
+ThinkingOS-clean/
+_clean_temp/
+_zip_staging/
+*.zip
+create-zip-fast.ps1
