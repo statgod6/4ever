@@ -4,6 +4,8 @@ import {
   Controller,
   Delete,
   Get,
+  InternalServerErrorException,
+  Logger,
   NotFoundException,
   Param,
   Post,
@@ -33,6 +35,8 @@ import { UsageService } from '../usage/usage.service';
 @Controller('knowledge-worker')
 @UseGuards(JwtAuthGuard, PremiumGuard)
 export class KnowledgeWorkerController {
+  private readonly logger = new Logger(KnowledgeWorkerController.name);
+
   constructor(
     private kw: KnowledgeWorkerService,
     private docs: DocumentExtractionService,
@@ -99,7 +103,13 @@ export class KnowledgeWorkerController {
   )
   async uploadDocument(@UploadedFile() file: Express.Multer.File, @Request() req) {
     if (!file) throw new BadRequestException('No file uploaded');
-    return this.docs.ingest(req.user.userId, file);
+    try {
+      return await this.docs.ingest(req.user.userId, file);
+    } catch (err: any) {
+      if (err instanceof BadRequestException) throw err;
+      this.logger.error(`Upload failed for user ${req.user.userId}: ${err?.message}`, err?.stack);
+      throw new InternalServerErrorException('Document processing failed. Please try again.');
+    }
   }
 
   @Get('documents')
