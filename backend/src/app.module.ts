@@ -29,6 +29,7 @@ import { UsageModule } from './usage/usage.module';
 import { ConsentModule } from './consent/consent.module';
 import { HealthModule } from './health/health.module';
 import { SupportModule } from './support/support.module';
+import { AgentActionsModule } from './agent-actions/agent-actions.module';
 
 @Module({
   imports: [
@@ -130,9 +131,9 @@ import { SupportModule } from './support/support.module';
     //   auth_short — tight per-minute limit for OTP / login endpoints
     //   auth_long  — anti-enumeration 15-min window
     ThrottlerModule.forRoot([
-      { name: 'default', ttl: 60_000, limit: 30 },
-      { name: 'auth_short', ttl: 60_000, limit: 3 },
-      { name: 'auth_long', ttl: 900_000, limit: 10 },
+      { name: 'default', ttl: 60_000, limit: 300 },
+      { name: 'auth_short', ttl: 60_000, limit: 5 },
+      { name: 'auth_long', ttl: 900_000, limit: 20 },
     ]),
     PrismaModule,
     AuthModule,
@@ -158,6 +159,7 @@ import { SupportModule } from './support/support.module';
     ConsentModule,
     HealthModule,
     SupportModule,
+    AgentActionsModule,
   ],
   providers: [
     {

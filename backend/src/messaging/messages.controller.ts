@@ -10,6 +10,7 @@ import {
   UseGuards,
   Request,
 } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { MessagingService } from './messaging.service';
 import { MediatorService } from './mediator.service';
@@ -30,6 +31,7 @@ export class MessagesController {
     return this.messagingService.getConversationList(req.user.userId);
   }
 
+  @SkipThrottle()
   @Get('unread')
   getTotalUnread(@Request() req) {
     return this.messagingService.getTotalUnread(req.user.userId);
