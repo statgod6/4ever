@@ -1,3 +1,10 @@
+// Force-load .env BEFORE anything else, with override:true so values in
+// backend/.env always win over polluted shell env vars (e.g. an empty
+// AWS_ACCESS_KEY_ID set in the parent PowerShell session).
+import * as dotenv from 'dotenv';
+import { resolve } from 'path';
+dotenv.config({ path: resolve(__dirname, '..', '.env'), override: true });
+
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe } from '@nestjs/common';
@@ -39,7 +46,18 @@ async function bootstrap() {
   );
 
   // ─── Response compression ─────────────────────────────────────────────────
-  app.use(compression());
+  // Skip compression for SSE streams — compression buffers chunks and
+  // kills real-time token-by-token streaming.
+  app.use(
+    compression({
+      filter: (req, res) => {
+        if (res.getHeader('Content-Type') === 'text/event-stream') {
+          return false;
+        }
+        return compression.filter(req, res);
+      },
+    }),
+  );
 
   // ─── Body size limits (prevent payload-based abuse) ───────────────────────
   // JSON endpoints: 2 MB is plenty for chat + planner payloads.
@@ -74,25 +92,23 @@ async function bootstrap() {
   // response contract.
   app.useGlobalFilters(new SentryExceptionFilter());
 
-  app.setGlobalPrefix('api');
+  app.setGlobalPrefix('api', {
+    exclude: ['/'],
+  });
 
   // ─── Static uploads (avatars, KW generated assets) ────────────────────────
-  // Mobile <Image uri> and browser <a download> cannot attach Authorization
-  // headers, so /uploads is public. Security posture:
-  //   1. Avatar filenames use randomUUID (no user id leak — see users.controller).
-  //   2. KW generated filenames embed server-generated UUIDs and go through an
-  //      explicit controller with filename validation.
-  //   3. Cache-Control: private prevents CDN / shared-cache storage.
-  // TODO(P5-storage): replace local disk with S3/R2 + HMAC-signed URLs so we
-  // can gate every fetch on a short-lived cryptographic token.
-  app.useStaticAssets(join(__dirname, '..', 'uploads'), {
-    prefix: '/uploads/',
-    setHeaders: (res) => {
-      res.setHeader('Cache-Control', 'private, max-age=86400');
-      res.setHeader('X-Content-Type-Options', 'nosniff');
-      res.setHeader('Content-Security-Policy', "default-src 'none'; img-src 'self' data:");
-    },
-  });
+  // In production, private files must be served through authenticated routes
+  // or S3 signed URLs. Local disk serving is disabled in production.
+  if (!isProd) {
+    app.useStaticAssets(join(__dirname, '..', 'uploads'), {
+      prefix: '/uploads/',
+      setHeaders: (res) => {
+        res.setHeader('Cache-Control', 'private, max-age=86400');
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('Content-Security-Policy', "default-src 'none'; img-src 'self' data:");
+      },
+    });
+  }
 
   // ─── Health / probe endpoints ─────────────────────────────────────────────
   // Now provided by HealthModule (/api/health + /api/livez + /api/readyz).
