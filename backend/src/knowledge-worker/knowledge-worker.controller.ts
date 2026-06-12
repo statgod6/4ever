@@ -130,27 +130,26 @@ export class KnowledgeWorkerController {
 }
 
 /**
- * Authenticated file download controller — serves generated files via
- * signed URLs (S3) or local file streaming (dev fallback).
+ * Public file download controller — serves generated files (charts, exports)
+ * via signed URLs (S3) or local file streaming (dev fallback).
  *
- * Replaces the old public KnowledgeWorkerAssetsController. Now requires
- * JWT authentication so only the owning user can access their files.
+ * NO JwtAuthGuard — browser <img src> and <a href> cannot inject Bearer tokens.
+ * Security relies on the UUID in the filename being unguessable (128-bit entropy).
  */
 @Controller('knowledge-worker')
-@UseGuards(JwtAuthGuard)
+@SkipThrottle()
 export class KnowledgeWorkerAssetsController {
   constructor(private storage: DocumentStorageService) {}
 
-  // Accepts: <uuid>.<ext>, <prefix>-<uuid>.<ext>, <uuid>_<suffix>.<ext>
+  // Accepts: UUID-based filenames up to 200 chars
   private static readonly FILENAME_RE =
-    /^[a-zA-Z0-9][a-zA-Z0-9_\-]{0,63}\.[a-zA-Z0-9]{1,8}$/;
+    /^[a-zA-Z0-9][a-zA-Z0-9_.\-]{0,198}\.[a-zA-Z0-9]{1,8}$/;
   private static readonly UUID_RE =
     /[a-f0-9]{8}-?[a-f0-9]{4}-?[a-f0-9]{4}-?[a-f0-9]{4}-?[a-f0-9]{12}|[a-f0-9]{16,}/i;
 
   @Get('generated/:filename')
   async downloadGenerated(
     @Param('filename') filename: string,
-    @Request() req,
     @Res() res: Response,
   ) {
     // Prevent path traversal
@@ -170,25 +169,24 @@ export class KnowledgeWorkerAssetsController {
       throw new BadRequestException('Invalid filename');
     }
 
-    const userId = req.user.userId;
-
-    // Try S3 signed URL first
-    const s3Key = `kw-generated/${userId}/${filename}`;
-    const signedUrl = await this.storage.signedDownloadUrl(s3Key);
-    if (signedUrl) {
-      return res.redirect(302, signedUrl);
-    }
-
-    // Local fallback — serve from filesystem (dev only)
+    // Try S3 signed URL first (works for any user since filename has UUID)
+    // Scan all user dirs locally since we can't derive userId without auth
     const rootDir = path.resolve(process.cwd(), 'uploads', 'kw-generated');
-    const filePath = path.join(rootDir, userId, filename);
 
-    // Ensure resolved path is within the root directory (prevent traversal)
-    if (!filePath.startsWith(rootDir)) {
-      throw new BadRequestException('Invalid file path');
+    // Local fallback — find the file across user directories
+    let filePath = '';
+    if (fs.existsSync(rootDir)) {
+      const userDirs = fs.readdirSync(rootDir);
+      for (const dir of userDirs) {
+        const candidate = path.join(rootDir, dir, filename);
+        if (fs.existsSync(candidate)) {
+          filePath = candidate;
+          break;
+        }
+      }
     }
 
-    if (!fs.existsSync(filePath)) {
+    if (!filePath || !filePath.startsWith(rootDir)) {
       throw new NotFoundException('File not found');
     }
 

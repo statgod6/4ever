@@ -507,7 +507,35 @@ export default function KnowledgeWorker() {
                   ))}
                 </div>
               )}
-              {streamingText || (
+              {streamingText ? (
+                <div className="kw-markdown text-[15px] leading-relaxed text-gray-900">
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      img: ({ node, ...props }) => (
+                        <img
+                          {...props}
+                          className="my-3 max-w-full rounded-lg border border-gray-200 shadow-sm"
+                          loading="lazy"
+                        />
+                      ),
+                      a: ({ node, ...props }) => (
+                        <a
+                          {...props}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-indigo-600 hover:text-indigo-700 underline underline-offset-2"
+                        />
+                      ),
+                      p: ({ node, ...props }) => (
+                        <p className="my-1 first:mt-0 last:mb-0 whitespace-pre-wrap" {...props} />
+                      ),
+                    }}
+                  >
+                    {streamingText}
+                  </ReactMarkdown>
+                </div>
+              ) : (
                 <span className="text-gray-400 italic">Thinking…</span>
               )}
             </div>
