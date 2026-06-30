@@ -29,7 +29,6 @@ import { UsageModule } from './usage/usage.module';
 import { ConsentModule } from './consent/consent.module';
 import { HealthModule } from './health/health.module';
 import { SupportModule } from './support/support.module';
-import { AgentActionsModule } from './agent-actions/agent-actions.module';
 import { MemoryOsModule } from './memory-os/memory-os.module';
 
 @Module({
@@ -160,7 +159,6 @@ import { MemoryOsModule } from './memory-os/memory-os.module';
     ConsentModule,
     HealthModule,
     SupportModule,
-    AgentActionsModule,
     MemoryOsModule,
   ],
   providers: [

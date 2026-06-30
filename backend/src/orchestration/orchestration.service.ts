@@ -7,7 +7,6 @@ import { invokeWithRetry } from './graph/nodes/run-personas.node';
 import { generateEmbedding } from './graph/utils/embeddings';
 import { storeMemoryWithDedup, trackMemoryAccess, logProfileChange } from './graph/utils/memory-utils';
 import { createCoreChatAgent, getCoreChatToolList } from './graph/core-chat-agent';
-import { PendingActionCreator } from './graph/tools/core-chat-tools';
 import { runCoreChatStreamLoop } from './graph/core-chat-loop';
 import { KnowledgeBaseService } from '../knowledge-base/knowledge-base.service';
 import { MemoryConsolidationService } from './memory-consolidation.service';
@@ -17,7 +16,6 @@ import { formatNowInTz, timeAgo, computeSessionGap, stripLeakedTimePrefix, TimeM
 import { DimensionsService } from '../dimensions/dimensions.service';
 import { LIFE_DIMENSIONS, isValidDimension } from '../dimensions/dimension.constants';
 import { classifyContextScope, ContextScope } from './context-scope';
-import { AgentActionsService } from '../agent-actions/agent-actions.service';
 import { SkillsService } from '../skills/skills.service';
 import { MemoryManagerService } from '../memory-os/memory-manager.service';
 import { ContextBuilderService } from '../memory-os/context-builder.service';
@@ -39,7 +37,6 @@ export class OrchestrationService implements OnModuleInit {
     private memoryConsolidation: MemoryConsolidationService,
     private ontology: OntologyService,
     private dimensions: DimensionsService,
-    private agentActions: AgentActionsService,
     private skillsService: SkillsService,
     private memoryManager: MemoryManagerService,
     private contextBuilder: ContextBuilderService,
@@ -1770,11 +1767,6 @@ Example: [{"content": "Draft business proposal by Friday", "dimension": "Career"
 
     try {
       // Create per-request ReAct agent (tools need userId bound)
-      const pendingCreator: PendingActionCreator | undefined =
-        process.env.NODE_ENV === 'production'
-          ? (toolName, payload, riskLevel) =>
-              this.agentActions.createPending(userId, toolName, payload, riskLevel)
-          : undefined;
       const agent = createCoreChatAgent(
         this.prisma,
         userId,
@@ -1782,7 +1774,7 @@ Example: [{"content": "Draft business proposal by Friday", "dimension": "Career"
         this.defaultModel,
         this.tavilyApiKey,
         this.dimensions,
-        pendingCreator,
+        undefined, // pendingCreator - agent-actions module not yet implemented
         this.memoryManager,
       );
 
@@ -1954,18 +1946,13 @@ Example: [{"content": "Draft business proposal by Friday", "dimension": "Career"
     yield { event: 'thinking', data: { status: 'reasoning' } };
 
     try {
-      const streamPendingCreator: PendingActionCreator | undefined =
-        process.env.NODE_ENV === 'production'
-          ? (toolName, payload, riskLevel) =>
-              this.agentActions.createPending(userId, toolName, payload, riskLevel)
-          : undefined;
       const tools = getCoreChatToolList(
         this.prisma,
         userId,
         this.openRouterApiKey,
         this.tavilyApiKey,
         this.dimensions,
-        streamPendingCreator,
+        undefined, // pendingCreator - agent-actions not yet implemented
         this.memoryManager,
       );
 
