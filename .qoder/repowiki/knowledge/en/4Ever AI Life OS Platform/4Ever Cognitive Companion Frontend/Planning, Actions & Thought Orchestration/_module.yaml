@@ -1,0 +1,11 @@
+schema_version: 1
+module_path: frontend/planning_and_actions
+title: Planning, Actions & Thought Orchestration
+scope:
+    - frontend/src/pages/Planner.tsx
+    - frontend/src/pages/Actions.tsx
+    - frontend/src/pages/NewThought.tsx
+source_files: []
+depends_on: []
+related_to:
+    - path: backend

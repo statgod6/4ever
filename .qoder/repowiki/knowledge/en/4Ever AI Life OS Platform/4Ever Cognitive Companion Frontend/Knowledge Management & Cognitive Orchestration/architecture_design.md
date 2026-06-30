@@ -1,0 +1,4 @@
+- **Page-Level Entry Points**: The module is composed of three distinct React pages (`KnowledgeWorker`, `MemoryDashboard`, `ThoughtThread`) that serve as the primary UI boundaries for different cognitive tasks.
+- **API Abstraction Layer**: Each page consumes a dedicated API client (`knowledge-worker.ts`, `memories.ts`, `thoughts.ts`, `orchestration.ts`) that encapsulates REST and Server-Sent Events (SSE) communication with the backend orchestration engine.
+- **State Management Integration**: Pages integrate with global stores (`subscriptionStore`, `thoughtStore`, `authStore`) to manage user tiers, active thought contexts, and authentication tokens for secure streaming endpoints.
+- **Streaming Architecture**: Complex interactions like persona analysis and knowledge worker chats utilize custom SSE parsers within the API layer to handle real-time token generation and tool-use telemetry.

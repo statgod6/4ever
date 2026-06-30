@@ -1,0 +1,3 @@
+- SSE Streaming: Uses `fetch` with `TextDecoder` for real-time AI response handling in `orchestration.ts`.
+- State Management: `zustand` for lightweight global state in `thoughtStore.ts`.
+- Icons: `lucide-react` for consistent iconography.

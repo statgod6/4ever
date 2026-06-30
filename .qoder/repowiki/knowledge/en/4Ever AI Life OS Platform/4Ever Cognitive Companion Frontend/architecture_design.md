@@ -1,0 +1,3 @@
+- Centralized API client (`api/client.ts`) enforces consistent authentication via Axios interceptors and a global Zustand auth store, automatically handling token injection and 401-driven logout across all feature modules.
+- A root `Layout` component acts as the primary orchestrator, managing global UI states like sidebar navigation, focus mode, and real-time WebSocket connections for messaging, while conditionally rendering child pages based on auth status.
+- Shared Zustand stores (`authStore`, `messagingStore`, `thoughtStore`) provide cross-module state synchronization, enabling real-time updates (e.g., unread message counts) and persistent user context throughout the application lifecycle.

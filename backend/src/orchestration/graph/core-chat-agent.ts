@@ -5,6 +5,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { createCoreChatTools } from './tools/core-chat-tools';
 import { createExternalTools } from './tools/external-tools';
 import { DimensionsService } from '../../dimensions/dimensions.service';
+import { MemoryManagerService } from '../../memory-os/memory-manager.service';
 
 /**
  * Creates a LangGraph ReAct agent for Core Chat.
@@ -22,8 +23,10 @@ export function createCoreChatAgent(
   defaultModel: string,
   tavilyApiKey?: string,
   dimensionsService?: DimensionsService,
+  pendingCreator?: any,
+  memoryManager?: MemoryManagerService,
 ) {
-  const internalTools = createCoreChatTools(prisma, userId, openRouterApiKey, dimensionsService);
+  const internalTools = createCoreChatTools(prisma, userId, openRouterApiKey, dimensionsService, memoryManager);
   const externalTools = createExternalTools(tavilyApiKey);
   const tools = [...internalTools, ...externalTools];
 
@@ -38,4 +41,22 @@ export function createCoreChatAgent(
     llm: model,
     tools,
   });
+}
+
+/**
+ * Returns just the tool list (internal + external) without creating the agent.
+ * Used by the streaming Core Chat path which manages the agent loop separately.
+ */
+export function getCoreChatToolList(
+  prisma: PrismaService,
+  userId: string,
+  openRouterApiKey: string,
+  tavilyApiKey?: string,
+  dimensionsService?: DimensionsService,
+  pendingCreator?: any,
+  memoryManager?: MemoryManagerService,
+) {
+  const internalTools = createCoreChatTools(prisma, userId, openRouterApiKey, dimensionsService, memoryManager);
+  const externalTools = createExternalTools(tavilyApiKey);
+  return [...internalTools, ...externalTools];
 }

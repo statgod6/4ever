@@ -1,0 +1,4 @@
+- Use of optimistic UI updates for messaging actions (e.g., adding temporary messages before server confirmation in `Messages.tsx` and `messagingStore.ts`).
+- Consistent error handling using a shared `toast` utility for user feedback on API failures across all pages.
+- Implementation of loading states with `Loader2` spinners during async data fetching or action processing.
+- Use of Tailwind CSS utility classes for responsive two-panel layouts in `Messages.tsx` (sidebar hidden/shown based on active chat state).

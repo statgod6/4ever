@@ -6,6 +6,7 @@ import { trackMemoryAccess, storeMemoryWithDedup } from '../utils/memory-utils';
 import { createActionItemIfNew } from '../../../actions/action-dedup.util';
 import { DimensionsService } from '../../../dimensions/dimensions.service';
 import { LIFE_DIMENSIONS, DIMENSION_LABELS } from '../../../dimensions/dimension.constants';
+import { MemoryManagerService } from '../../../memory-os/memory-manager.service';
 
 /**
  * Creates the 7 internal tools for the Core Chat ReAct agent.
@@ -16,6 +17,7 @@ export function createCoreChatTools(
   userId: string,
   openRouterApiKey: string,
   dimensionsService?: DimensionsService,
+  memoryManager?: MemoryManagerService,
 ) {
   // ── 1. create_action ──────────────────────────────────────────────
   const createAction = tool(
@@ -358,6 +360,24 @@ export function createCoreChatTools(
     async ({ query, limit }) => {
       try {
         const maxResults = limit || 5;
+
+        // Use MemoryManager if available (Memory OS path)
+        if (memoryManager) {
+          const memories = await memoryManager.retrieve(userId, query, { limit: maxResults });
+          if (memories.length === 0) return 'No memories found matching that query.';
+
+          const lines = memories.map((m) => {
+            const dateStr = m.createdAt
+              ? new Date(m.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+              : 'unknown';
+            const sim = m.similarity ? ` (relevance: ${(m.similarity * 100).toFixed(0)}%)` : '';
+            const srcLabel = m.source && m.source !== 'thought' ? ` [${m.source}]` : '';
+            return `- [${m.memoryType}] [${dateStr}]${srcLabel} ${m.content}${sim}`;
+          });
+          return `Found ${memories.length} memories:\n${lines.join('\n')}`;
+        }
+
+        // Fallback: legacy path
         const queryEmbedding = await generateEmbedding(query.substring(0, 1000), openRouterApiKey);
 
         if (queryEmbedding.length > 0) {
@@ -375,9 +395,7 @@ export function createCoreChatTools(
                + 0.1 * GREATEST(1.0 - EXTRACT(EPOCH FROM (NOW() - m.last_accessed_at)) / 2592000.0, 0.0)
              ) DESC
              LIMIT $3`,
-            vectorStr,
-            userId,
-            maxResults,
+            vectorStr, userId, maxResults,
           );
 
           if (results.length > 0) {
@@ -394,7 +412,6 @@ export function createCoreChatTools(
           }
         }
 
-        // Fallback: importance-based
         const memories = await prisma.memory.findMany({
           where: { userId, status: 'active' as any },
           orderBy: [{ importanceScore: 'desc' }, { createdAt: 'desc' }],
@@ -2451,6 +2468,14 @@ ${personContexts.map((p) => p.context).join('\n\n---\n')}`;
   const updateMemory = tool(
     async ({ query, newContent }) => {
       try {
+        // Use MemoryManager if available (Memory OS path)
+        if (memoryManager) {
+          const result = await memoryManager.update(userId, query, newContent);
+          if (!result.updated) return `No memory found matching "${query}". Nothing was updated.`;
+          return `Memory updated! Old: "${result.oldContent?.substring(0, 100)}..." → New: "${newContent.substring(0, 100)}..."`;
+        }
+
+        // Fallback: legacy path
         const embedding = await generateEmbedding(query.substring(0, 1000), openRouterApiKey);
         if (embedding.length === 0) return 'Failed to generate embedding for memory search.';
         const vectorStr = `[${embedding.join(',')}]`;
@@ -2471,7 +2496,6 @@ ${personContexts.map((p) => p.context).join('\n\n---\n')}`;
           where: { id: old.id },
           data: { content: newContent, updatedAt: new Date() },
         });
-        // Re-embed the updated content
         const newEmb = await generateEmbedding(newContent.substring(0, 1000), openRouterApiKey);
         if (newEmb.length > 0) {
           const newVec = `[${newEmb.join(',')}]`;
@@ -2499,6 +2523,14 @@ ${personContexts.map((p) => p.context).join('\n\n---\n')}`;
   const forgetMemory = tool(
     async ({ query }) => {
       try {
+        // Use MemoryManager if available (Memory OS path)
+        if (memoryManager) {
+          const result = await memoryManager.archive(userId, query);
+          if (!result.archived) return `No memory found matching "${query}". Nothing was removed.`;
+          return `Memory archived: "${result.content?.substring(0, 120)}..." — I'll no longer recall this.`;
+        }
+
+        // Fallback: legacy path
         const embedding = await generateEmbedding(query.substring(0, 1000), openRouterApiKey);
         if (embedding.length === 0) return 'Failed to generate embedding for memory search.';
         const vectorStr = `[${embedding.join(',')}]`;
@@ -2537,6 +2569,22 @@ ${personContexts.map((p) => p.context).join('\n\n---\n')}`;
   const addManualMemory = tool(
     async ({ content, category }) => {
       try {
+        // Use MemoryManager if available (Memory OS path)
+        if (memoryManager) {
+          const result = await memoryManager.store({
+            userId,
+            content,
+            source: 'manual',
+            category: category || null,
+            importanceScore: 0.8,
+          });
+          if (!result.stored && result.reason === 'duplicate') {
+            return `I already remember something very similar. No new memory was added.`;
+          }
+          return `Got it! I'll remember: "${content.substring(0, 120)}" ${category ? `[${category}]` : ''}`;
+        }
+
+        // Fallback: legacy path
         const result = await storeMemoryWithDedup(prisma, openRouterApiKey, {
           userId,
           content,
@@ -2559,6 +2607,91 @@ ${personContexts.map((p) => p.context).join('\n\n---\n')}`;
       schema: z.object({
         content: z.string().describe('The fact or information to remember'),
         category: z.string().optional().describe('Category like preference, fact, goal, relationship, etc.'),
+      }),
+    },
+  );
+
+  // ── 49. set_goal ──────────────────────────────────────────────
+  const setGoal = tool(
+    async ({ content, priority }) => {
+      try {
+        if (!memoryManager) {
+          // Fallback: store as a regular memory with goal type
+          const result = await storeMemoryWithDedup(prisma, openRouterApiKey, {
+            userId,
+            content,
+            memoryType: 'goal',
+            source: 'manual',
+            importanceScore: 0.9,
+          });
+          return result.stored
+            ? `Goal stored: "${content.substring(0, 120)}" (priority: ${priority || 'high'})`
+            : `Similar goal already exists.`;
+        }
+
+        // Memory OS path: store with goal type and high importance
+        const result = await memoryManager.store({
+          userId,
+          content,
+          memoryType: 'goal',
+          source: 'manual',
+          importanceScore: priority === 'low' ? 0.7 : priority === 'medium' ? 0.8 : 0.9,
+        });
+
+        if (!result.stored && result.reason === 'duplicate') {
+          return `Similar goal already exists. No new goal was added.`;
+        }
+        return `Goal stored: "${content.substring(0, 120)}" (priority: ${priority || 'high'}). This will always be in my context.`;
+      } catch (err: any) {
+        return `Failed to store goal: ${err.message}`;
+      }
+    },
+    {
+      name: 'set_goal',
+      description: 'Explicitly create or update a goal. Use when the user states a goal, objective, or aspiration. Goals are always present in context.',
+      schema: z.object({
+        content: z.string().describe('The goal or objective'),
+        priority: z.enum(['low', 'medium', 'high']).optional().describe('Priority level (default: high)'),
+      }),
+    },
+  );
+
+  // ── 50. recall_pattern ──────────────────────────────────────────
+  const recallPattern = tool(
+    async ({ query }) => {
+      try {
+        const patterns = await prisma.memoryPattern.findMany({
+          where: { userId, isActive: true },
+          orderBy: { confidence: 'desc' },
+          take: 10,
+        });
+
+        if (patterns.length === 0) return 'No behavioral patterns discovered yet. Patterns emerge as I learn more about you.';
+
+        // Filter by query if provided
+        let filtered = patterns;
+        if (query && query.trim().length > 0) {
+          const lowerQuery = query.toLowerCase();
+          filtered = patterns.filter(p =>
+            p.pattern.toLowerCase().includes(lowerQuery)
+          );
+          if (filtered.length === 0) {
+            return `No patterns matching "${query}". Here are all known patterns:\n${patterns.map(p => `- ${p.pattern} (confidence: ${(p.confidence * 100).toFixed(0)}%)`).join('\n')}`;
+          }
+        }
+
+        return `Behavioral patterns:\n${filtered.map(p =>
+          `- ${p.pattern} (confidence: ${(p.confidence * 100).toFixed(0)}%)`
+        ).join('\n')}`;
+      } catch (err: any) {
+        return `Failed to recall patterns: ${err.message}`;
+      }
+    },
+    {
+      name: 'recall_pattern',
+      description: 'Ask about discovered behavioral patterns, habits, or trends. Use when the user asks "what patterns do you see?", "what are my habits?", etc.',
+      schema: z.object({
+        query: z.string().optional().describe('Optional filter — what kind of pattern to look for'),
       }),
     },
   );
@@ -2701,6 +2834,8 @@ ${personContexts.map((p) => p.context).join('\n\n---\n')}`;
     updateMemory,
     forgetMemory,
     addManualMemory,
+    setGoal,
+    recallPattern,
     rateDimension,
     submitWeeklyCheckin,
     getLifeWheel,

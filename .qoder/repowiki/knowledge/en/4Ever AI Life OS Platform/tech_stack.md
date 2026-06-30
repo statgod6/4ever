@@ -1,0 +1,1 @@
+All clients share a TypeScript-based stack with Axios for HTTP communication and Socket.IO for real-time bidirectional messaging, backed by a PostgreSQL database with pgvector for cross-module semantic search capabilities.

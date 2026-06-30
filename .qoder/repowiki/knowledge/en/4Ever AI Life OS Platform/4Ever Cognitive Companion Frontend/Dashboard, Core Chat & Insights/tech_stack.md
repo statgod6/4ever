@@ -1,0 +1,3 @@
+- **Server-Sent Events (SSE)**: Used in `orchestrationApi` for real-time streaming of AI responses and tool activity indicators.
+- **Zustand**: Global state management library used for auth and thought persistence across pages.
+- **Lucide React**: Iconography library used consistently across all three pages for visual cues.

@@ -1,0 +1,1 @@
+A cross-platform React Native application providing an AI-powered life management interface with social networking, personal knowledge management, and real-time communication features.

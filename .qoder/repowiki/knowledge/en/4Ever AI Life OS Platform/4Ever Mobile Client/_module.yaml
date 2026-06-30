@@ -1,0 +1,9 @@
+schema_version: 1
+module_path: mobile
+title: 4Ever Mobile Client
+scope:
+    - mobile/
+source_files: []
+depends_on: []
+related_to:
+    - path: backend

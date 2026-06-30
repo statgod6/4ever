@@ -1,0 +1,11 @@
+schema_version: 1
+module_path: frontend/dashboard_and_core_chat
+title: Dashboard, Core Chat & Insights
+scope:
+    - frontend/src/pages/Dashboard.tsx
+    - frontend/src/pages/CoreChat.tsx
+    - frontend/src/pages/Insights.tsx
+source_files: []
+depends_on: []
+related_to:
+    - path: backend

@@ -8,6 +8,9 @@ import { storeMemoryWithDedup } from './graph/utils/memory-utils';
 /**
  * Memory Consolidation Engine.
  *
+ * @deprecated Partially replaced by Memory OS PatternDetectorService.
+ * Kept for backward compatibility — will be fully migrated in a future release.
+ *
  * Periodically merges semantically similar memories into consolidated
  * summaries and resolves contradictions to prevent memory bloat and
  * ensure the agent's understanding stays coherent.

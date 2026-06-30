@@ -1,0 +1,5 @@
+- **Framework & Structure**: Built on NestJS with a modular architecture (`src/app.module.ts`), where each domain (e.g., `auth`, `messaging`, `orchestration`) is a self-contained module with controller/service/DTO layers.
+- **Data Layer**: Uses Prisma ORM (`prisma/schema.prisma`) with PostgreSQL, leveraging the `pgvector` extension for semantic search in memory and document embeddings.
+- **AI Orchestration**: Integrates LangChain/LangGraph (`@langchain/langgraph`) to implement ReAct-style agents for three core flows: Core Chat (personal companion), Tri-Chat Mediator (relationship conflict resolution), and Knowledge Worker (premium document/code analysis).
+- **Real-time Communication**: Employs Socket.IO (`@nestjs/platform-socket.io`) in the `messaging` module for live chat and mediator interactions.
+- **Observability & Security**: Centralized structured logging with `nestjs-pino` (including PII redaction), Sentry for error tracking, and Helmet for HTTP security headers. Authentication uses JWT with Passport strategies and phone-based OTP.

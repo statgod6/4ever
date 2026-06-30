@@ -1,0 +1,16 @@
+schema_version: 1
+module_path: frontend_style
+title: Cross-Platform Design System with Tailwind CSS and React Native Theming
+scope: []
+source_files:
+    - frontend/tailwind.config.js
+    - frontend/src/index.css
+    - frontend/postcss.config.js
+    - frontend/src/components/Layout.tsx
+    - mobile/src/constants/colors.ts
+    - mobile/src/constants/neonStyles.ts
+    - mobile/src/contexts/ThemeContext.tsx
+    - mobile/src/components/LoadingState.tsx
+    - mobile/src/screens/DashboardScreen.tsx
+depends_on: []
+related_to: []

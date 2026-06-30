@@ -1,0 +1,1 @@
+Orchestrates a React-based cognitive companion interface by unifying authentication, real-time AI interaction, and personal knowledge management through a shared state and API layer.

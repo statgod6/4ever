@@ -1,0 +1,15 @@
+schema_version: 1
+module_path: backend
+title: AI-Powered Personal Companion & Relationship Mediation Backend
+scope:
+    - backend/
+source_files: []
+depends_on: []
+related_to:
+    - path: frontend/auth_and_shell
+    - path: frontend/dashboard_and_core_chat
+    - path: frontend/knowledge_management
+    - path: frontend/personal_context
+    - path: frontend/planning_and_actions
+    - path: frontend/relationships_and_messaging
+    - path: mobile

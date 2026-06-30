@@ -1,0 +1,11 @@
+schema_version: 1
+module_path: frontend/auth_and_shell
+title: Authentication & Application Shell
+scope:
+    - frontend/src/pages/Login.tsx
+    - frontend/src/App.tsx
+    - frontend/src/main.tsx
+source_files: []
+depends_on: []
+related_to:
+    - path: backend

@@ -1,0 +1,2 @@
+- Both frontend and mobile clients implement identical Axios interceptor patterns for automatic JWT injection and global 401 logout handling.
+- Real-time features across web and mobile use a shared Socket.IO event naming convention (e.g., `send_message`, `tri_chat_toggled`, `mediator_chunk`) defined in the backend gateway.

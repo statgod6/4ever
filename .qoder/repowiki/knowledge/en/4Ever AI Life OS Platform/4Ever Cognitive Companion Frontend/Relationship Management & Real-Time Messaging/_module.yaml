@@ -1,0 +1,11 @@
+schema_version: 1
+module_path: frontend/relationships_and_messaging
+title: Relationship Management & Real-Time Messaging
+scope:
+    - frontend/src/pages/MyCircle.tsx
+    - frontend/src/pages/Connections.tsx
+    - frontend/src/pages/Messages.tsx
+source_files: []
+depends_on: []
+related_to:
+    - path: backend

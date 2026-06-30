@@ -1,0 +1,3 @@
+- API clients are organized as singleton objects with async methods returning typed data, centralized in the `src/api/` directory.
+- Complex text content from AI responses is processed by utility functions (e.g., `splitPersonaSections`) before rendering to support mixed-format displays like collapsible markdown and persona-specific blocks.
+- Loading states are managed locally per data-fetching operation (e.g., `isLoadingStats`, `isLoadingTopics`) to allow granular UI feedback and partial page rendering.

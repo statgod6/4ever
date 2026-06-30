@@ -19,6 +19,9 @@ import { LIFE_DIMENSIONS, isValidDimension } from '../dimensions/dimension.const
 import { classifyContextScope, ContextScope } from './context-scope';
 import { AgentActionsService } from '../agent-actions/agent-actions.service';
 import { SkillsService } from '../skills/skills.service';
+import { MemoryManagerService } from '../memory-os/memory-manager.service';
+import { ContextBuilderService } from '../memory-os/context-builder.service';
+import { PatternDetectorService } from '../memory-os/pattern-detector.service';
 
 @Injectable()
 export class OrchestrationService implements OnModuleInit {
@@ -38,6 +41,9 @@ export class OrchestrationService implements OnModuleInit {
     private dimensions: DimensionsService,
     private agentActions: AgentActionsService,
     private skillsService: SkillsService,
+    private memoryManager: MemoryManagerService,
+    private contextBuilder: ContextBuilderService,
+    private patternDetector: PatternDetectorService,
   ) {}
 
   /** Timeout for streaming LLM fetch calls (ms). */
@@ -507,6 +513,7 @@ export class OrchestrationService implements OnModuleInit {
   }
 
   /**
+   * @deprecated Replaced by Memory OS ContextBuilder.build(). Kept for fallback / backward compat.
    * Fetches relevant memories for direct use (outside graph).
    */
   private async fetchRelevantMemories(userId: string, searchText: string): Promise<string | null> {
@@ -653,9 +660,8 @@ export class OrchestrationService implements OnModuleInit {
   }
 
   /**
+   * @deprecated Replaced by Memory OS ContextBuilder.build(). Kept for backward compat.
    * Gathers all context needed for Core Chat (superset of persona context).
-   * Fetches user profile, memories, calendar, mood, stats, relationships,
-   * events, connections, messages, and shared notes — all in parallel.
    */
   private async buildCoreChatContext(userId: string, message: string): Promise<string[]> {
     const scope: ContextScope = classifyContextScope(message);
@@ -1610,10 +1616,9 @@ Example: [{"content": "Draft business proposal by Friday", "dimension": "Career"
 
     const lines = text.split('\n').map((l) => l.trim()).filter((l) => l.length > 0 && l.length < 500);
     for (const line of lines.slice(0, 2)) {
-      await storeMemoryWithDedup(this.prisma, this.openRouterApiKey, {
+      await this.memoryManager.store({
         userId,
         content: line,
-        memoryType: thoughtType,
         importanceScore: 0.7,
         sourceThreadId: threadId,
         source: 'persona_reply',
@@ -1743,8 +1748,19 @@ Example: [{"content": "Draft business proposal by Friday", "dimension": "Career"
     });
     const history = historyDesc.reverse();
 
-    // Gather all user context in parallel
-    const contextParts = await this.buildCoreChatContext(userId, message);
+    // Gather all user context via Memory OS Context Builder
+    const contextBlocks = await this.contextBuilder.build(userId, message, {
+      includeOntology: this.ontologyEnabled,
+      ontologyBlocks: this.ontologyEnabled
+        ? await (async () => {
+            try {
+              const composed = await this.ontology.compose(userId, { relationalLimit: 5 });
+              return this.ontology.formatForPrompt(composed);
+            } catch { return []; }
+          })()
+        : undefined,
+    });
+    const contextParts = this.contextBuilder.formatForPrompt(contextBlocks);
 
     // V0 Skill System — shadow detection (logs matched skills, does not inject)
     this.skillsService.getRelevantSkillPrompt({ surface: 'core_chat', message });
@@ -1767,6 +1783,7 @@ Example: [{"content": "Draft business proposal by Friday", "dimension": "Career"
         this.tavilyApiKey,
         this.dimensions,
         pendingCreator,
+        this.memoryManager,
       );
 
       // Build messages for the agent — prefix each history message with its age
@@ -1914,8 +1931,19 @@ Example: [{"content": "Draft business proposal by Friday", "dimension": "Career"
     });
     const history = historyDesc.reverse();
 
-    // Gather all user context in parallel
-    const contextParts = await this.buildCoreChatContext(userId, message);
+    // Gather all user context via Memory OS Context Builder
+    const contextBlocks = await this.contextBuilder.build(userId, message, {
+      includeOntology: this.ontologyEnabled,
+      ontologyBlocks: this.ontologyEnabled
+        ? await (async () => {
+            try {
+              const composed = await this.ontology.compose(userId, { relationalLimit: 5 });
+              return this.ontology.formatForPrompt(composed);
+            } catch { return []; }
+          })()
+        : undefined,
+    });
+    const contextParts = this.contextBuilder.formatForPrompt(contextBlocks);
 
     // V0 Skill System — shadow detection (logs matched skills, does not inject)
     this.skillsService.getRelevantSkillPrompt({ surface: 'core_chat', message });
@@ -1938,6 +1966,7 @@ Example: [{"content": "Draft business proposal by Friday", "dimension": "Career"
         this.tavilyApiKey,
         this.dimensions,
         streamPendingCreator,
+        this.memoryManager,
       );
 
       const agentMessages: Array<{ role: 'system' | 'user' | 'assistant' | 'tool'; content: string }> = [
@@ -2376,7 +2405,7 @@ Example: {"profileUpdates": {"situation": "Starting a new job next month"}, "mem
       }
     }
 
-    // 2. Store memories
+    // 2. Store memories (via Memory OS)
     const memories = Array.isArray(parsed.memories) ? parsed.memories.slice(0, 2) : [];
     for (const mem of memories) {
       if (
@@ -2385,12 +2414,11 @@ Example: {"profileUpdates": {"situation": "Starting a new job next month"}, "mem
         mem.importanceScore &&
         mem.importanceScore >= 3
       ) {
-        await storeMemoryWithDedup(this.prisma, this.openRouterApiKey, {
+        await this.memoryManager.store({
           userId,
           content: mem.content,
-          memoryType: mem.memoryType || 'insight',
+          memoryType: mem.memoryType === 'goal' ? 'goal' : mem.memoryType === 'insight' ? 'reflection' : 'semantic',
           importanceScore: mem.importanceScore / 10, // normalize to 0-1
-          sourceThreadId: null,
           source: 'core_chat',
         });
         this.logger.log(`Core Chat: Stored memory (importance ${mem.importanceScore}): ${mem.content.substring(0, 60)}...`);
@@ -2425,7 +2453,10 @@ Example: {"profileUpdates": {"situation": "Starting a new job next month"}, "mem
       this.logger.log(`Core Chat: Recorded ${rawSignals.length} dimension signal(s)`);
     }
 
-    // 5. Fire-and-forget: check if consolidation is needed
+    // 5. Fire-and-forget: check if pattern detection and consolidation are needed
+    this.patternDetector.maybeDetectPatterns(userId).catch((err) =>
+      this.logger.warn(`Pattern detection check failed: ${err.message}`),
+    );
     this.memoryConsolidation.maybeConsolidate(userId).catch((err) =>
       this.logger.warn(`Memory consolidation check failed: ${err.message}`),
     );

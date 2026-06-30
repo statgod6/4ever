@@ -1,0 +1,6 @@
+- **Runtime**: Expo SDK ~54.0.34, React Native 0.81.5, React 19.1.0.
+- **State & Persistence**: Zustand 5.0.12, expo-secure-store, @react-native-async-storage/async-storage.
+- **Networking**: Axios 1.15.2, socket.io-client 4.8.3.
+- **Navigation**: @react-navigation/native 7.2.2, native-stack, bottom-tabs.
+- **Styling**: nativewind 4.2.3, tailwindcss 3.4.19, expo-linear-gradient.
+- **Native Modules**: expo-apple-authentication, expo-contacts, expo-image-picker, react-native-reanimated.

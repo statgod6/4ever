@@ -1,0 +1,11 @@
+schema_version: 1
+module_path: frontend/personal_context
+title: Personal Context & Persona Management
+scope:
+    - frontend/src/pages/Reflections.tsx
+    - frontend/src/pages/MyContext.tsx
+    - frontend/src/pages/Personas.tsx
+source_files: []
+depends_on: []
+related_to:
+    - path: backend

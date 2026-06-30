@@ -1,0 +1,4 @@
+- Three independent page-level components (`Reflections.tsx`, `MyContext.tsx`, `Personas.tsx`) serving as entry points for distinct personal-context features.
+- Each page consumes dedicated API clients (`reflectionsApi`, `userContextApi`, `personasApi`, `knowledgeBaseApi`) imported from sibling `../api` modules, keeping data-fetching logic outside the UI layer.
+- Shared UI primitives (`Toast`, `Markdown`, `ConfirmModal`) and state stores (`usePersonaStore`) are imported from `../components` and `../store`, establishing a clear dependency direction: pages → API/store/component layers.
+- `Personas.tsx` orchestrates both persona CRUD and per-persona knowledge-base document management (upload, list, delete), demonstrating a composite responsibility within a single page component rather than splitting into sub-components.

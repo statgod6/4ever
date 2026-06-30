@@ -1,0 +1,2 @@
+- **Server-Sent Events (SSE)**: Custom stream readers in `knowledge-worker.ts` and `orchestration.ts` handle `event:` and `data:` lines for real-time AI responses.
+- **Markdown Rendering**: `react-markdown` with `remark-gfm` is used across `KnowledgeWorker` and `ThoughtThread` for rich text visualization of AI outputs.

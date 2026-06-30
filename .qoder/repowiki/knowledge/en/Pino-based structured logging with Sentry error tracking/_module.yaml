@@ -1,0 +1,12 @@
+schema_version: 1
+module_path: logging_system
+title: Pino-based structured logging with Sentry error tracking
+scope: []
+source_files:
+    - backend/src/app.module.ts
+    - backend/src/main.ts
+    - backend/src/sentry.ts
+    - backend/src/common/sentry-exception.filter.ts
+    - backend/package.json
+depends_on: []
+related_to: []
