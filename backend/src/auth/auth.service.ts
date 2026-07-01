@@ -3,25 +3,33 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
+import { SNSClient, PublishCommand } from '@aws-sdk/client-sns';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class AuthService {
-  private twilioClient: any;
-  private twilioPhone: string;
+  private snsClient: SNSClient | null = null;
+  private snsSenderId: string;
 
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
     private configService: ConfigService,
   ) {
-    const accountSid = this.configService.get<string>('TWILIO_ACCOUNT_SID');
-    const authToken = this.configService.get<string>('TWILIO_AUTH_TOKEN');
-    this.twilioPhone = this.configService.get<string>('TWILIO_PHONE_NUMBER') || '';
+    const awsRegion = this.configService.get<string>('AWS_REGION') || 'ap-south-1';
+    const awsKeyId = this.configService.get<string>('AWS_ACCESS_KEY_ID');
+    const awsSecretKey = this.configService.get<string>('AWS_SECRET_ACCESS_KEY');
+    this.snsSenderId = this.configService.get<string>('AWS_SNS_SENDER_ID') || '';
 
-    if (accountSid && authToken && !accountSid.startsWith('your-')) {
-      const twilio = require('twilio');
-      this.twilioClient = twilio(accountSid, authToken);
+    // Initialize SNS client only if credentials are present and not placeholders
+    if (awsKeyId && awsSecretKey && !awsKeyId.startsWith('replace-')) {
+      this.snsClient = new SNSClient({
+        region: awsRegion,
+        credentials: {
+          accessKeyId: awsKeyId,
+          secretAccessKey: awsSecretKey,
+        },
+      });
     }
   }
 
@@ -63,16 +71,28 @@ export class AuthService {
       console.log(`[OTP] ${normalized}: ${code}`);
     }
 
-    // Send via Twilio if configured and from/to are different
-    if (this.twilioClient && this.twilioPhone !== normalized) {
+    // Send via AWS SNS if configured
+    if (this.snsClient) {
       try {
-        await this.twilioClient.messages.create({
-          body: `Your 4Ever verification code is: ${code}`,
-          from: this.twilioPhone,
-          to: normalized,
-        });
+        const messageAttributes: Record<string, any> = {};
+        if (this.snsSenderId) {
+          // AWS.SNS.SMS.SenderID — required for India (DLT-registered)
+          messageAttributes['AWS.SNS.SMS.SenderID'] = {
+            DataType: 'String',
+            StringValue: this.snsSenderId,
+          };
+          messageAttributes['AWS.SNS.SMS.SMSType'] = {
+            DataType: 'String',
+            StringValue: 'Transactional',
+          };
+        }
+        await this.snsClient.send(new PublishCommand({
+          Message: `Your 4Ever verification code is: ${code}`,
+          PhoneNumber: normalized,
+          MessageAttributes: messageAttributes,
+        }));
       } catch (err: any) {
-        console.error('Twilio SMS error:', err.message);
+        console.error('AWS SNS SMS error:', err.message);
       }
     }
 

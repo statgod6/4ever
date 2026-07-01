@@ -25,6 +25,7 @@
     "personas:seed-templates": "ts-node scripts/seed-persona-templates.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-sns": "^3.1077.0",
     "@e2b/code-interpreter": "^2.4.1",
     "@langchain/core": "^1.1.40",
     "@langchain/langgraph": "^1.2.8",
