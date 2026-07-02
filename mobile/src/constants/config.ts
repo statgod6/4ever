@@ -27,7 +27,7 @@ import Constants from 'expo-constants'
 // LAN IP used ONLY when EXPO_PUBLIC_API_URL is unset and we're running Expo Go
 // on a physical device against a local backend. Engineers change this (or, far
 // better, set EXPO_PUBLIC_API_URL in `.env`) to point at their own laptop.
-const DEV_MACHINE_IP = '192.168.31.212'
+const DEV_MACHINE_IP = '20.20.16.105'
 const DEV_PORT = 3001
 
 const isExpoGo = !!Constants.expoGoConfig
