@@ -4,18 +4,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as SecureStore from 'expo-secure-store'
 import { setCachedToken, setLogoutFn } from '../api/client'
 
-// ── DEV BYPASS ──────────────────────────────────────────────────────
-// Set to true to skip authentication during development.
-// Remember to set back to false before shipping!
-const DEV_AUTH_BYPASS = __DEV__ && true
-const DEV_USER: User = {
-  id: 'f2ebbf1e-7e07-4448-b21d-0b926f7674cd',
-  phoneNumber: '+0studentteachaicom',
-  name: 'Abhinav',
-}
-const DEV_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJmMmViYmYxZS03ZTA3LTQ0NDgtYjIxZC0wYjkyNmY3Njc0Y2QiLCJwaG9uZSI6Iiswc3R1ZGVudHRlYWNoYWljb20iLCJpYXQiOjE3ODI5NjgwMzgsImV4cCI6MTc4NTU2MDAzOH0.dH9jMdljV_WsdDwNzhhZFjnZBEFNBlIW0CnK_IWQ_2Q'
-// ────────────────────────────────────────────────────────────────────
-
 interface User {
   id: string
   phoneNumber: string
@@ -66,12 +54,6 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
   setLoading: (loading: boolean) => set({ isLoading: loading }),
 
   hydrate: async () => {
-    // Dev bypass: auto-login with dev user when flag is set
-    if (DEV_AUTH_BYPASS) {
-      setCachedToken(DEV_TOKEN)
-      set({ token: DEV_TOKEN, user: DEV_USER, isAuthenticated: true, isLoading: false })
-      return
-    }
     try {
       const token = await SecureStore.getItemAsync('auth-token')
       const userStr = await AsyncStorage.getItem('auth-user')

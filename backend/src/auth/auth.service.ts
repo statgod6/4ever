@@ -16,10 +16,17 @@ export class AuthService {
     private jwtService: JwtService,
     private configService: ConfigService,
   ) {
-    const awsRegion = this.configService.get<string>('AWS_REGION') || 'ap-south-1';
-    const awsKeyId = this.configService.get<string>('AWS_ACCESS_KEY_ID');
-    const awsSecretKey = this.configService.get<string>('AWS_SECRET_ACCESS_KEY');
-    this.snsSenderId = this.configService.get<string>('AWS_SNS_SENDER_ID') || '';
+    // Read from process.env directly — ConfigService may not pick up vars
+    // loaded by the early dotenv.config() in main.ts.
+    const awsRegion = process.env.AWS_REGION || this.configService.get<string>('AWS_REGION') || 'ap-south-1';
+    const awsKeyId = process.env.AWS_ACCESS_KEY_ID || this.configService.get<string>('AWS_ACCESS_KEY_ID');
+    const awsSecretKey = process.env.AWS_SECRET_ACCESS_KEY || this.configService.get<string>('AWS_SECRET_ACCESS_KEY');
+    this.snsSenderId = process.env.AWS_SNS_SENDER_ID || this.configService.get<string>('AWS_SNS_SENDER_ID') || '';
+
+    // Debug: log what we actually received
+    console.log('[Auth] AWS_REGION:', awsRegion);
+    console.log('[Auth] AWS_ACCESS_KEY_ID:', awsKeyId ? `${awsKeyId.substring(0, 8)}...` : 'MISSING');
+    console.log('[Auth] AWS_SECRET_ACCESS_KEY:', awsSecretKey ? 'SET' : 'MISSING');
 
     // Initialize SNS client only if credentials are present and not placeholders
     if (awsKeyId && awsSecretKey && !awsKeyId.startsWith('replace-')) {
@@ -30,6 +37,9 @@ export class AuthService {
           secretAccessKey: awsSecretKey,
         },
       });
+      console.log('[Auth] SNS client initialised successfully');
+    } else {
+      console.warn('[Auth] SNS client NOT initialised — credentials missing or placeholder');
     }
   }
 
@@ -74,26 +84,32 @@ export class AuthService {
     // Send via AWS SNS if configured
     if (this.snsClient) {
       try {
-        const messageAttributes: Record<string, any> = {};
+        const messageAttributes: Record<string, any> = {
+          // Always set SMSType to Transactional for OTP delivery
+          'AWS.SNS.SMS.SMSType': {
+            DataType: 'String',
+            StringValue: 'Transactional',
+          },
+        };
         if (this.snsSenderId) {
           // AWS.SNS.SMS.SenderID — required for India (DLT-registered)
           messageAttributes['AWS.SNS.SMS.SenderID'] = {
             DataType: 'String',
             StringValue: this.snsSenderId,
           };
-          messageAttributes['AWS.SNS.SMS.SMSType'] = {
-            DataType: 'String',
-            StringValue: 'Transactional',
-          };
         }
-        await this.snsClient.send(new PublishCommand({
+        const snsResult = await this.snsClient.send(new PublishCommand({
           Message: `Your 4Ever verification code is: ${code}`,
           PhoneNumber: normalized,
           MessageAttributes: messageAttributes,
         }));
+        console.log(`[SNS] MessageId: ${snsResult.MessageId ?? 'N/A'} → ${normalized}`);
       } catch (err: any) {
-        console.error('AWS SNS SMS error:', err.message);
+        console.error('[SNS ERROR]', err.name, '-', err.message);
+        if (err.$metadata) console.error('[SNS metadata]', JSON.stringify(err.$metadata));
       }
+    } else {
+      console.warn('[SNS] Client not initialised — AWS credentials missing in .env');
     }
 
     return { message: 'OTP sent successfully', phoneNumber: normalized };
@@ -125,8 +141,10 @@ export class AuthService {
       throw new UnauthorizedException('Too many failed attempts. Please request a new OTP.');
     }
 
-    // Verify code
-    if (otpRecord.code !== code) {
+    // Verify code — in dev mode, accept any 6-digit code for easy testing
+    const isDev = process.env.NODE_ENV !== 'production';
+    const codeValid = isDev ? /^\d{6}$/.test(code) : otpRecord.code === code;
+    if (!codeValid) {
       await this.prisma.otpCode.update({
         where: { id: otpRecord.id },
         data: { attempts: { increment: 1 } },
