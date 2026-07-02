@@ -23,13 +23,9 @@ import PersonasScreen from '../screens/PersonasScreen'
 import KnowledgeWorkerScreen from '../screens/KnowledgeWorkerScreen'
 import PersonaChatScreen from '../screens/PersonaChatScreen'
 import MessagesScreen from '../screens/MessagesScreen'
-import ConnectionsScreen from '../screens/ConnectionsScreen'
 import PlannerScreen from '../screens/PlannerScreen'
 import ActionsScreen from '../screens/ActionsScreen'
-import InsightsScreen from '../screens/InsightsScreen'
-import ReflectionsScreen from '../screens/ReflectionsScreen'
 import MyContextScreen from '../screens/MyContextScreen'
-import MemoryScreen from '../screens/MemoryScreen'
 import EditProfileScreen from '../screens/EditProfileScreen'
 import PrivacyDataScreen from '../screens/PrivacyDataScreen'
 import ThoughtDetailScreen from '../screens/ThoughtDetailScreen'
@@ -70,7 +66,6 @@ function DashboardStackScreen() {
       <DashboardStack.Screen name="EditProfile" component={EditProfileScreen} options={{ title: 'Edit Profile' }} />
       <DashboardStack.Screen name="Planner" component={PlannerScreen} options={{ title: 'Day Planner' }} />
       <DashboardStack.Screen name="Actions" component={ActionsScreen} options={{ title: 'Action Items' }} />
-      <DashboardStack.Screen name="Reflections" component={ReflectionsScreen} options={{ title: 'Reflections' }} />
       <DashboardStack.Screen name="PersonDetail" component={PersonDetailScreen} options={{ title: 'Person' }} />
       <DashboardStack.Screen name="PersonaChat" component={PersonaChatScreen} options={({ route }: any) => ({ title: route.params?.personaName || 'Chat' })} />
       <DashboardStack.Screen name="LifeDimensions" component={LifeDimensionsScreen} options={{ title: 'Life Wheel' }} />
@@ -111,7 +106,6 @@ function CircleStackScreen() {
       <CircleStack.Screen name="PersonDetail" component={PersonDetailScreen} options={{ title: 'Person' }} />
       <CircleStack.Screen name="PersonaChat" component={PersonaChatScreen} options={({ route }: any) => ({ title: route.params?.personaName || 'Chat' })} />
       <CircleStack.Screen name="Messages" component={MessagesScreen} options={{ title: 'Messages' }} />
-      <CircleStack.Screen name="Connections" component={ConnectionsScreen} options={{ title: 'Connection Requests' }} />
       <CircleStack.Screen name="ContactsPicker" component={ContactsPickerScreen} options={{ title: 'Import Contacts' }} />
     </CircleStack.Navigator>
   )
@@ -133,10 +127,7 @@ function MoreStackScreen() {
       <MoreStack.Screen name="PersonaChat" component={PersonaChatScreen} options={({ route }: any) => ({ title: route.params?.personaName || 'Chat' })} />
       <MoreStack.Screen name="Planner" component={PlannerScreen} options={{ title: 'Day Planner' }} />
       <MoreStack.Screen name="Actions" component={ActionsScreen} options={{ title: 'Action Items' }} />
-      <MoreStack.Screen name="Insights" component={InsightsScreen} options={{ title: 'Insights' }} />
-      <MoreStack.Screen name="Reflections" component={ReflectionsScreen} options={{ title: 'Reflections' }} />
       <MoreStack.Screen name="MyContext" component={MyContextScreen} options={{ title: 'My Context' }} />
-      <MoreStack.Screen name="Memory" component={MemoryScreen} options={{ title: 'Memory System' }} />
       <MoreStack.Screen name="KnowledgeWorker" component={KnowledgeWorkerScreen} options={{ title: 'Knowledge Worker' }} />
       <MoreStack.Screen name="EditProfile" component={EditProfileScreen} options={{ title: 'Edit Profile' }} />
       <MoreStack.Screen name="PrivacyData" component={PrivacyDataScreen} options={{ title: 'Privacy & Data' }} />

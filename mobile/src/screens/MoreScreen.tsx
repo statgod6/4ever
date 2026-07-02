@@ -16,10 +16,7 @@ const menuItems = [
   { key: 'Personas', icon: '🎭', label: 'Personas', screen: 'Personas' },
   { key: 'Planner', icon: '📅', label: 'Day Planner', screen: 'Planner' },
   { key: 'Actions', icon: '✅', label: 'Action Items', screen: 'Actions' },
-  { key: 'Insights', icon: '📊', label: 'Insights', screen: 'Insights' },
-  { key: 'Reflections', icon: '✨', label: 'Reflections', screen: 'Reflections' },
   { key: 'MyContext', icon: '👤', label: 'My Context', screen: 'MyContext' },
-  { key: 'Memory', icon: '🧠', label: 'Memory System', screen: 'Memory' },
   { key: 'PrivacyData', icon: '🔒', label: 'Privacy & Data', screen: 'PrivacyData' },
 ]
 

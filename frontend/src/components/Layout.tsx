@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { 
   Brain, 
@@ -7,43 +7,23 @@ import {
   LogOut, 
   Menu, 
   X,
-  Focus,
   MessageCircle,
-  Send,
-  Loader2,
-  Sparkles,
-  PlusCircle,
   Library,
   UserCircle,
-  TrendingUp,
   CalendarDays,
   CheckSquare,
   Heart,
-  Sparkles as SparklesIcon,
   ChevronsLeft,
   ChevronsRight,
-  Database,
   Briefcase,
 } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
-import { thoughtsApi } from '../api/thoughts'
-import { personasApi } from '../api/personas'
-import { orchestrationApi } from '../api/orchestration'
-import { useThoughtStore } from '../store/thoughtStore'
-import { toast } from './Toast'
-import Markdown from './Markdown'
 import { useMessagingStore } from '../store/messagingStore'
 import { useSubscriptionStore } from '../store/subscriptionStore'
 import { connectSocket, disconnectSocket } from '../api/socket'
-import type { Persona } from '../store/personaStore'
 
 interface LayoutProps {
   children: React.ReactNode
-}
-
-interface ChatMessage {
-  role: 'user' | 'assistant'
-  content: string
 }
 
 export default function Layout({ children }: LayoutProps) {
@@ -51,26 +31,10 @@ export default function Layout({ children }: LayoutProps) {
   const [isCollapsed, setIsCollapsed] = useState(() => {
     try { return localStorage.getItem('sidebar-collapsed') === 'true' } catch { return false }
   })
-  const [focusMode, setFocusMode] = useState(false)
   const location = useLocation()
   const navigate = useNavigate()
   const { logout, user } = useAuthStore()
-  const { addThought } = useThoughtStore()
-
-  // Focus Mode state
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
-  const [chatInput, setChatInput] = useState('')
-  const [isChatLoading, setIsChatLoading] = useState(false)
-  const [showChat, setShowChat] = useState(false)
-  const [focusPersonas, setFocusPersonas] = useState<Persona[]>([])
-  const [selectedChatPersona, setSelectedChatPersona] = useState<string>('')
-  const [quickTitle, setQuickTitle] = useState('')
-  const [quickText, setQuickText] = useState('')
-  const [isSavingQuick, setIsSavingQuick] = useState(false)
-  const chatEndRef = useRef<HTMLDivElement>(null)
   const { totalUnread, loadUnreadCount } = useMessagingStore()
-  const subTier = useSubscriptionStore((s) => s.tier)
-  const subActive = useSubscriptionStore((s) => s.active)
   const subLoaded = useSubscriptionStore((s) => s.loaded)
   const loadSubscription = useSubscriptionStore((s) => s.load)
 
@@ -82,53 +46,6 @@ export default function Layout({ children }: LayoutProps) {
     const interval = setInterval(loadUnreadCount, 30000)
     return () => { clearInterval(interval); disconnectSocket() }
   }, [])
-
-  useEffect(() => {
-    if (focusMode) {
-      personasApi.getActive().then(setFocusPersonas).catch(() => {})
-    }
-  }, [focusMode])
-
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [chatMessages])
-
-  const handleChatSend = async () => {
-    if (!chatInput.trim() || isChatLoading) return
-    const userMsg = chatInput.trim()
-    setChatInput('')
-    setChatMessages((prev) => [...prev, { role: 'user', content: userMsg }])
-    setIsChatLoading(true)
-
-    try {
-      const result = await orchestrationApi.quickChat(userMsg, selectedChatPersona || undefined)
-      setChatMessages((prev) => [...prev, { role: 'assistant', content: result.response }])
-    } catch {
-      setChatMessages((prev) => [...prev, { role: 'assistant', content: 'Sorry, something went wrong.' }])
-    } finally {
-      setIsChatLoading(false)
-    }
-  }
-
-  const handleQuickCapture = async () => {
-    if (!quickTitle.trim() || !quickText.trim()) return
-    setIsSavingQuick(true)
-    try {
-      const thought = await thoughtsApi.create({
-        title: quickTitle,
-        rawText: quickText,
-        thoughtType: 'general reflection',
-      })
-      addThought(thought)
-      toast.success('Quick capture saved', 'Navigate to it from Dashboard.')
-      setQuickTitle('')
-      setQuickText('')
-    } catch {
-      toast.error('Save failed', 'Could not save your quick thought.')
-    } finally {
-      setIsSavingQuick(false)
-    }
-  }
 
   const handleLogout = () => {
     logout()
@@ -142,149 +59,12 @@ export default function Layout({ children }: LayoutProps) {
     { path: '/new-thought', label: 'New Thought', icon: Plus },
     { path: '/personas', label: 'Personas', icon: Users },
     { path: '/circle', label: 'My Circle', icon: Heart },
-    { path: '/connections', label: 'Connections', icon: Users },
     { path: '/messages', label: 'Messages', icon: MessageCircle },
     { path: '/persona-library', label: 'Persona Library', icon: Library },
     { path: '/my-context', label: 'My Context', icon: UserCircle },
-    { path: '/insights', label: 'Insights', icon: TrendingUp },
     { path: '/planner', label: 'Day Planner', icon: CalendarDays },
     { path: '/actions', label: 'Action Items', icon: CheckSquare },
-    { path: '/reflections', label: 'Reflections', icon: SparklesIcon },
-    { path: '/memory', label: 'Memory', icon: Database },
   ]
-
-  // Focus Mode: Quick capture + AI chat
-  if (focusMode) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex flex-col">
-        {/* Top bar */}
-        <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Brain className="w-6 h-6 text-primary-600" />
-            <span className="font-bold text-gray-900">Focus Mode</span>
-          </div>
-          <button
-            onClick={() => { setFocusMode(false); setShowChat(false) }}
-            className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-          >
-            <X className="w-4 h-4" />
-            Exit Focus
-          </button>
-        </div>
-
-        <div className="flex-1 flex">
-          {/* Quick Capture Panel */}
-          <div className="flex-1 flex flex-col items-center justify-center p-8">
-            <div className="w-full max-w-xl">
-              <h2 className="text-xl font-semibold text-gray-900 mb-1">Quick Capture</h2>
-              <p className="text-sm text-gray-500 mb-6">Capture a thought quickly without distractions.</p>
-              <input
-                type="text"
-                value={quickTitle}
-                onChange={(e) => setQuickTitle(e.target.value)}
-                placeholder="Thought title..."
-                className="input mb-3 text-lg"
-              />
-              <textarea
-                value={quickText}
-                onChange={(e) => setQuickText(e.target.value)}
-                placeholder="Write your thought here..."
-                className="textarea text-base"
-                rows={10}
-                autoFocus
-              />
-              <button
-                onClick={handleQuickCapture}
-                disabled={!quickTitle.trim() || !quickText.trim() || isSavingQuick}
-                className="btn-primary mt-4 flex items-center gap-2 disabled:opacity-50"
-              >
-                {isSavingQuick ? <Loader2 className="w-5 h-5 animate-spin" /> : <PlusCircle className="w-5 h-5" />}
-                Save Thought
-              </button>
-            </div>
-          </div>
-
-          {/* AI Chat Sidebar */}
-          {showChat && (
-            <div className="w-96 border-l border-gray-200 bg-white flex flex-col">
-              <div className="p-4 border-b border-gray-200">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-primary-600" />
-                    AI Chat
-                  </h3>
-                  <button onClick={() => setShowChat(false)} className="p-1 hover:bg-gray-100 rounded">
-                    <X className="w-4 h-4 text-gray-400" />
-                  </button>
-                </div>
-                {focusPersonas.length > 0 && (
-                  <select
-                    value={selectedChatPersona}
-                    onChange={(e) => setSelectedChatPersona(e.target.value)}
-                    className="input py-1.5 text-sm"
-                  >
-                    <option value="">General Assistant</option>
-                    {focusPersonas.map((p) => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
-                    ))}
-                  </select>
-                )}
-              </div>
-              <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                {chatMessages.length === 0 && (
-                  <p className="text-gray-400 text-sm text-center mt-8">Ask anything to process your thoughts...</p>
-                )}
-                {chatMessages.map((msg, i) => (
-                  <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[85%] rounded-xl px-3 py-2 text-sm ${
-                      msg.role === 'user'
-                        ? 'bg-primary-600 text-white'
-                        : 'bg-gray-100 text-gray-800'
-                    }`}>
-                      {msg.role === 'assistant' ? <Markdown content={msg.content} /> : msg.content}
-                    </div>
-                  </div>
-                ))}
-                {isChatLoading && (
-                  <div className="flex justify-start">
-                    <div className="bg-gray-100 rounded-xl px-3 py-2">
-                      <Loader2 className="w-4 h-4 animate-spin text-gray-500" />
-                    </div>
-                  </div>
-                )}
-                <div ref={chatEndRef} />
-              </div>
-              <div className="p-3 border-t border-gray-200">
-                <form onSubmit={(e) => { e.preventDefault(); handleChatSend() }} className="flex gap-2">
-                  <input
-                    type="text"
-                    value={chatInput}
-                    onChange={(e) => setChatInput(e.target.value)}
-                    placeholder="Type a message..."
-                    className="input flex-1 py-1.5 text-sm"
-                  />
-                  <button type="submit" disabled={!chatInput.trim() || isChatLoading} className="p-2 bg-primary-600 text-white rounded-lg disabled:opacity-50 hover:bg-primary-700 transition-colors">
-                    <Send className="w-4 h-4" />
-                  </button>
-                </form>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Chat toggle FAB */}
-        {!showChat && (
-          <button
-            onClick={() => setShowChat(true)}
-            className="fixed bottom-8 right-8 w-14 h-14 bg-primary-600 text-white rounded-full shadow-xl hover:bg-primary-700 transition-all hover:scale-110 flex items-center justify-center"
-            title="AI Chat"
-          >
-            <MessageCircle className="w-7 h-7" />
-          </button>
-        )}
-      </div>
-    )
-  }
 
   return (
     <div className="h-screen bg-gray-50 flex overflow-hidden">
@@ -376,17 +156,6 @@ export default function Layout({ children }: LayoutProps) {
               </div>
             </div>
           )}
-          
-          <button
-            onClick={() => setFocusMode(true)}
-            title={isCollapsed ? 'Focus Mode' : undefined}
-            className={`w-full flex items-center gap-3 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors mb-2 ${
-              isCollapsed ? 'justify-center px-2' : 'px-4'
-            }`}
-          >
-            <Focus className="w-5 h-5 shrink-0" />
-            {!isCollapsed && <span>Enter Focus Mode</span>}
-          </button>
           
           <button
             onClick={handleLogout}

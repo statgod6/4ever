@@ -377,22 +377,6 @@ export default function MyCircleScreen() {
 
       {activeTab === 'People' && (
         <>
-          {/* Pending connection requests banner — only shown when non-zero */}
-          {pendingRequests.length > 0 && (
-            <TouchableOpacity
-              style={styles.pendingBanner}
-              onPress={() => navigation.navigate('Connections')}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.pendingBannerText}>
-                {pendingRequests.length} connection request{pendingRequests.length === 1 ? '' : 's'} waiting
-              </Text>
-              <Text style={styles.pendingBannerChevron}>Review ›</Text>
-            </TouchableOpacity>
-          )}
-
-          {/* Filter chips removed — list shows all people. Re-add FILTER_GROUPS UI here if filtering is needed again. */}
-
           {/* People list */}
           <FlatList
             data={filteredPeople}
