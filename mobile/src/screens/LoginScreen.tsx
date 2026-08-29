@@ -103,9 +103,12 @@ export default function LoginScreen() {
       await authApi.requestOtp({ phoneNumber: phoneNumber.trim() })
       setStep('otp')
       startCountdown()
-      showToast('Verification code sent!', 'success')
+      showToast(
+        __DEV__ ? 'Dev mode: enter any 6-digit code' : 'Verification code sent!',
+        'success',
+      )
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to send OTP', 'error')
+      showToast(err.response?.data?.message || err.message || 'Failed to send OTP', 'error')
     } finally {
       setLoading(false)
     }
@@ -162,9 +165,12 @@ export default function LoginScreen() {
     try {
       await authApi.requestOtp({ phoneNumber: phoneNumber.trim() })
       startCountdown()
-      showToast('Code resent!', 'success')
+      showToast(
+        __DEV__ ? 'Dev mode: enter any 6-digit code' : 'Code resent!',
+        'success',
+      )
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to resend', 'error')
+      showToast(err.response?.data?.message || err.message || 'Failed to resend', 'error')
     } finally {
       setLoading(false)
     }

@@ -1,138 +1,137 @@
 ## Overview
 
-The 4Ever AI Life OS Platform implements a **dual-platform styling architecture** that maintains visual consistency across web (React + Vite) and mobile (React Native + Expo) clients through shared design tokens and platform-appropriate styling methodologies.
+The Memory Operating System employs a **dual-platform styling strategy** that maintains visual consistency across web (React + Vite) and mobile (React Native + Expo) through shared design tokens while leveraging platform-appropriate tooling.
 
 ---
 
 ## Web Frontend: Tailwind CSS Utility-First Approach
 
-### Technology Stack
-- **Tailwind CSS v3** for utility-first styling
-- **PostCSS** with `autoprefixer` plugin
-- **Custom component classes** defined via `@layer components`
-- **No CSS-in-JS libraries** — pure Tailwind utilities and custom CSS
+### Configuration
 
-### Design Tokens (`frontend/tailwind.config.js`)
-A single primary color palette based on **sky blue** (`#0ea5e9` at 500):
-```js
-colors: {
-  primary: {
-    50: '#f0f9ff',  // lightest
-    500: '#0ea5e9', // base
-    900: '#0c4a6e', // darkest
-  }
-}
-```
+The web application uses **Tailwind CSS v3** with PostCSS for processing. The configuration (`frontend/tailwind.config.js`) extends the default theme with:
 
-### Component Class System (`frontend/src/index.css`)
-Reusable semantic classes abstract common UI patterns:
-- `.btn-primary` / `.btn-secondary` — button variants with hover transitions
-- `.card` — white background, rounded corners, subtle shadow and border
-- `.input` / `.textarea` — form controls with focus ring on primary color
+- **Custom color palette**: A `primary` scale based on sky blue (`#0ea5e9` at 500), providing 10 shades from 50 to 900
+- **Custom animations**: `fadeIn`, `fade-in` keyframes for subtle entrance effects
+
+### Styling Methodology
+
+The codebase follows a **hybrid approach** combining:
+
+1. **Utility-first classes** — Direct Tailwind utility classes applied inline in JSX (e.g., `className="flex items-center gap-3 rounded-lg transition-colors"`)
+2. **Component-level abstractions** — Custom component classes defined in `frontend/src/index.css` using `@layer components`:
+   - `.btn-primary` / `.btn-secondary` — Standardized button styles
+   - `.card` — White background, rounded corners, subtle shadow and border
+   - `.input` / `.textarea` — Form controls with focus ring using primary color
 
 ### Animation System
-Six custom keyframe animations for micro-interactions:
-- `fade-in`, `scale-in`, `slide-up` — entry animations with cubic-bezier easing
-- `shimmer` — loading skeleton effect (2s infinite linear)
-- `float` — gentle vertical oscillation (3s ease-in-out)
-- `pulse-soft` — opacity pulsing for attention cues
 
-Stagger delays (`.stagger-1` through `.stagger-5`) enable sequenced list animations.
+A rich set of **custom keyframe animations** is defined in `index.css`:
+
+| Animation | Purpose |
+|-----------|---------|
+| `fade-in` | Simple opacity transition (0.2s) |
+| `scale-in` | Scale + opacity entrance (0.25s) |
+| `slide-up` | Vertical slide with cubic-bezier easing (0.4s) |
+| `shimmer` | Loading skeleton effect (2s infinite) |
+| `float` | Gentle vertical bobbing (3s infinite) |
+| `pulse-soft` | Subtle opacity pulse |
+
+Staggered animation delays (`.stagger-1` through `.stagger-5`) enable sequenced entrances.
 
 ### Visual Effects
-- `.glass` — backdrop blur (12px) for frosted glass overlays
-- `.gradient-text` — purple-to-indigo gradient text clip
 
-### Layout Pattern
-The `Layout.tsx` component demonstrates consistent use of:
-- Flexbox-based responsive layout (`flex`, `flex-col`, `flex-1`)
-- Fixed sidebar with collapsible state (68px collapsed, 256px expanded)
-- Mobile overlay pattern with `bg-black/50` backdrop
-- Consistent spacing via Tailwind's default scale (`p-4`, `gap-2`, etc.)
+- **Glass morphism**: `.glass` class applies `backdrop-filter: blur(12px)`
+- **Gradient text**: `.gradient-text` uses a purple-to-indigo gradient clipped to text
+
+### Base Styles
+
+Global defaults set via `@layer base`:
+- Body background: `bg-gray-50`
+- Body text: `text-gray-900`
 
 ---
 
-## Mobile Client: React Native Theme Context + Design Tokens
+## Mobile: React Native Theme Context with Design Tokens
 
-### Technology Stack
-- **React Native StyleSheet** for component-scoped styles
-- **Custom ThemeContext** with system/light/dark mode support
-- **AsyncStorage persistence** for user theme preference
-- **expo-linear-gradient** for gradient backgrounds
-- **No third-party UI library** — hand-crafted components
+### Architecture
 
-### Shared Color Palette (`mobile/src/constants/colors.ts`)
-The mobile app mirrors the web app's sky blue primary palette exactly, ensuring cross-platform brand consistency:
-```ts
+The mobile app uses a **React Context-based theming system** (`mobile/src/contexts/ThemeContext.tsx`) that provides:
+
+- **Three theme modes**: `'system'` (follows OS), `'light'`, `'dark'`
+- **Persistent preference**: Stored in AsyncStorage under key `'theme-mode'`
+- **Dynamic resolution**: Combines user preference with `useColorScheme()` from React Native
+
+### Design Tokens
+
+All visual values are centralized in `mobile/src/constants/colors.ts`:
+
+#### Color Palette
+
+The mobile palette **mirrors the web Tailwind config** exactly for the `primary` scale, ensuring cross-platform visual parity:
+
+```typescript
 primary: {
-  50: '#f0f9ff',
-  500: '#0ea5e9',
-  900: '#0c4a6e',
+  50: '#f0f9ff',  // ... through 900: '#0c4a6e'
 }
 ```
 
-Additional semantic color groups:
-- `gray` — 9-step neutral scale for text hierarchy
-- `green`, `red`, `amber`, `purple` — status/semantic colors with light/dark variants
+Additional semantic scales: `gray`, `green`, `red`, `amber`, `purple` — each with light/dark variants.
 
-### Dark Mode Implementation
-Full dark mode support via `ThemeContext`:
-- Reads system preference via `useColorScheme()`
-- Persists user override (`'system' | 'light' | 'dark'`) in AsyncStorage
-- Provides `colors` token object and `isDark` boolean to all consumers
-- Dark palette inverts grays while preserving primary hue saturation
+#### Spacing, Typography, Border Radius
 
-### Design Token Exports
-Beyond colors, the constants module exports:
-- `Spacing` — 7-step scale (4px to 40px): `xs`, `sm`, `md`, `lg`, `xl`, `2xl`, `3xl`, `4xl`
-- `FontSize` — 7-step typography scale (12px to 30px)
-- `BorderRadius` — 5-step radius scale (6px to 9999px for full circles)
+Numeric design tokens provide consistent sizing:
 
-### Style Creation Pattern
-Components use a **factory function pattern** to inject theme-aware colors:
-```tsx
+- **Spacing**: `xs: 4` through `4xl: 40` (pixels)
+- **Font sizes**: `xs: 12` through `3xl: 30`
+- **Border radius**: `sm: 6` through `full: 9999`
+
+### Theme Hook Usage
+
+Components consume styling via the `useTheme()` hook:
+
+```typescript
 const { colors, isDark } = useTheme()
-const styles = createStyles(colors, isDark)
-// ...
-const createStyles = (colors: ColorTokens, isDark: boolean) => StyleSheet.create({
-  container: { backgroundColor: colors.background },
-})
+// colors.primary[600], colors.background, colors.text, etc.
 ```
 
-This enables dynamic theming without re-render overhead since `StyleSheet.create` is memoized per theme state.
+### Neon Styling (Disabled)
 
-### Neon Styles (Disabled)
-The `neonStyles.ts` module previously provided glow/border effects for a "neon" aesthetic but is now **globally disabled** (returns empty style objects). The neon treatment survives only in `CoreChatScreen` where it's applied directly. This indicates a deliberate design decision to revert to a cleaner, classic UI outside the core chat experience.
-
----
-
-## Cross-Platform Conventions
-
-### Shared API Layer Structure
-Both platforms mirror each other's API client structure (`frontend/src/api/` and `mobile/src/api/`), suggesting coordinated feature development.
-
-### State Management Parity
-Both platforms use **Zustand** stores with identical naming:
-- `authStore`, `messagingStore`, `personaStore`, `subscriptionStore`, `thoughtStore`
-- Mobile adds `voiceStore` for voice-specific features
-
-### Responsive Strategy
-- **Web**: Tailwind's responsive prefixes (`lg:`, `md:`) with mobile-first breakpoints
-- **Mobile**: Platform-specific adaptations via `react-native-safe-area-context` and `useSafeAreaInsets`
-
-### Component Architecture
-- **Web**: Reusable components in `components/` directory (Layout, Toast, ConfirmModal, Markdown, ErrorBoundary)
-- **Mobile**: Similar component set plus mobile-specific patterns (`LifeWheel`, `PersonaPickerSheet`, `UserAvatar`, `LoadingState`)
+The `mobile/src/constants/neonStyles.ts` file contains placeholder helpers (`neonCard`, `neonSoft`) that previously provided glow/border effects. These are now **no-ops returning `{}`**, indicating a deliberate decision to remove neon aesthetics except in Core Chat.
 
 ---
 
-## Rules Developers Should Follow
+## Cross-Platform Consistency Strategy
 
-1. **Use semantic component classes on web** — prefer `.btn-primary`, `.card`, `.input` over raw utility combinations for consistency
-2. **Always consume colors via theme context on mobile** — never hardcode hex values; use `useTheme().colors.primary[500]`
-3. **Maintain color parity** — any new color token added to `tailwind.config.js` should have a corresponding entry in `mobile/src/constants/colors.ts`
-4. **Use design token scales** — spacing, font sizes, and border radii should come from the exported constants, not arbitrary pixel values
-5. **Respect the animation naming convention** — new animations should follow the `animate-{name}` class pattern with matching `@keyframes` definition
-6. **Dark mode must be opt-in compatible** — ensure new screens work in both light and dark modes by using `colors.background`, `colors.text`, etc. instead of hardcoded whites/blacks
-7. **Avoid inline styles on web** — use Tailwind utilities or `@layer components` classes; inline styles break the utility-first convention
-8. **Neon effects are deprecated** — do not reintroduce `neonCard` or `neonSoft` helpers unless explicitly scoped to Core Chat
+| Aspect | Web | Mobile | Alignment |
+|--------|-----|--------|-----------|
+| Primary color | Tailwind `primary-600` (#0284c7) | `LightColors.primary[600]` (#0284c7) | ✅ Identical hex values |
+| Gray scale | Tailwind default gray | Explicit `gray` token object | ✅ Semantically equivalent |
+| Background | `bg-gray-50` | `colors.background` (#f9fafb) | ✅ Near-identical |
+| Card surface | `bg-white` | `colors.card` (#ffffff) | ✅ Identical |
+| Border | `border-gray-200` | `colors.border` (#e5e7eb) | ✅ Identical |
+| Dark mode | Not implemented | Full dark theme support | ⚠️ Web lacks dark mode |
+
+---
+
+## Developer Conventions
+
+### Web (React + Tailwind)
+
+1. **Prefer utility classes** over custom CSS for layout, spacing, and typography
+2. **Use component classes** (`.btn-primary`, `.card`, `.input`) for reusable UI patterns
+3. **Apply animation classes** (`.animate-fade-in`, `.animate-scale-in`) for entrance effects; use `.stagger-N` for sequenced lists
+4. **Avoid inline styles** unless dynamic values require them
+5. **Extend Tailwind config** for new design tokens rather than hardcoding values
+
+### Mobile (React Native)
+
+1. **Always use `useTheme()`** to access colors — never import `Colors` directly (legacy export marked for migration)
+2. **Reference design tokens** from `colors.ts` for spacing, font sizes, and border radii
+3. **Support both light and dark modes** by using `colors` object properties instead of hardcoded hex values
+4. **Persist theme preference** through the context's `setThemeMode()` function
+
+### Cross-Platform
+
+1. **Keep color hex values synchronized** between `tailwind.config.js` and `colors.ts`
+2. **Match semantic intent** — if web uses `primary-600` for CTAs, mobile should use `colors.primary[600]`
+3. **Document visual changes** in both platforms when updating shared design decisions

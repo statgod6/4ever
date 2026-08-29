@@ -76,8 +76,12 @@ export class AuthService {
       console.log(`[OTP] ${normalized}: ${code}`);
     }
 
-    // Send via AWS SNS if configured
-    if (this.snsClient) {
+    // Development verification accepts any 6-digit OTP, so avoid making local
+    // Expo login depend on an external SMS request.
+    const isDevelopment = process.env.NODE_ENV !== 'production';
+    if (isDevelopment) {
+      console.log('[SNS] Skipped in development; enter any 6-digit OTP.');
+    } else if (this.snsClient) {
       try {
         const messageAttributes: Record<string, any> = {
           // Always set SMSType to Transactional for OTP delivery

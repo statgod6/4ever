@@ -1,4 +1,0 @@
-- **AI/LLM**: LangGraph ReAct agents via `@langchain/langgraph`, `@langchain/openrouter` for model access, and `@tavily/core` for web search tools.
-- **Database**: PostgreSQL with `pgvector` extension for embedding storage and similarity search.
-- **Sandboxing**: `@e2b/code-interpreter` for secure code execution in the Knowledge Worker agent.
-- **Auth**: Phone-based OTP authentication using Twilio and Sign in with Apple via `jose` for JWT verification.

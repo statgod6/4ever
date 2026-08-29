@@ -1,4 +1,0 @@
-- Entry Points: Three distinct page components (`Planner.tsx`, `Actions.tsx`, `NewThought.tsx`) serve as the primary UI boundaries.
-- API Layer: Dedicated API clients (`planner.ts`, `actions.ts`, `thoughts.ts`, `orchestration.ts`) encapsulate RESTful interactions and SSE streaming logic for AI responses.
-- State Management: Local component state handles UI interactions (e.g., task reordering, calendar navigation), while `zustand` (`thoughtStore.ts`) manages global thought data persistence across sessions.
-- Integration: The `Actions` module links to the `Planner` via a modal workflow, and `NewThought` triggers asynchronous persona analysis through the `orchestrationApi`.

@@ -1,3 +1,0 @@
-- **Database Management**: Uses Prisma migrations (`npm run db:migrate`) and generation (`npm run db:generate`). Specific scripts exist for ontology backfilling (`npm run ontology:backfill`) and seeding persona templates (`npm run personas:seed-templates`).
-- **Environment**: Requires `.env` with `DATABASE_URL`, `JWT_SECRET`, `OPENROUTER_API_KEY`, and optional `SENTRY_DSN`. Fails closed if `JWT_SECRET` is weak or missing.
-- **Deployment**: Configured for Fly.io (`fly.toml`) and Railway (`railway.json`), with Docker support (`Dockerfile`).

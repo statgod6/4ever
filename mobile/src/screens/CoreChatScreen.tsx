@@ -262,19 +262,19 @@ export default function CoreChatScreen() {
             setThinkingText(event.data.text || event.data.status || 'Thinking...')
             break
           case 'thinking_delta':
-            thinkingAccum += event.data.chunk || ''
+            thinkingAccum += event.data.chunk || event.data.text || ''
             setThinkingText(thinkingAccum)
             break
           case 'tool_start':
             setToolActivities((prev) => [
               ...prev,
-              { tool: event.data.tool, input: event.data.input, done: false },
+              { tool: event.data.name || event.data.tool, input: event.data.args || event.data.input, done: false },
             ])
             break
           case 'tool_end':
             setToolActivities((prev) =>
               prev.map((t) =>
-                t.tool === event.data.tool && !t.done ? { ...t, done: true } : t,
+                (t.tool === (event.data.name || event.data.tool) && !t.done) ? { ...t, done: true } : t,
               ),
             )
             break
@@ -283,7 +283,7 @@ export default function CoreChatScreen() {
             setStreamedContent('')
             break
           case 'token':
-            fullResponse += event.data.chunk || ''
+            fullResponse += event.data.text || event.data.chunk || ''
             setStreamedContent(fullResponse)
             scrollToBottom()
             break

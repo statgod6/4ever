@@ -14,7 +14,8 @@
 - [thinking-os-core.node.ts](file://backend/src/orchestration/graph/nodes/thinking-os-core.node.ts)
 - [update-summary.node.ts](file://backend/src/orchestration/graph/nodes/update-summary.node.ts)
 - [store-memory.node.ts](file://backend/src/orchestration/graph/nodes/store-memory.node.ts)
-- [memory-consolidation.service.ts](file://backend/src/orchestration/memory-consolidation.service.ts)
+- [personas.service.ts](file://backend/src/personas/personas.service.ts)
+- [orchestration.controller.ts](file://backend/src/orchestration/orchestration.controller.ts)
 </cite>
 
 ## Table of Contents
@@ -29,23 +30,20 @@
 9. [Conclusion](#conclusion)
 
 ## Introduction
-This document describes the persona orchestration engine that coordinates multiple AI personalities to analyze thoughts and facilitate conversations. The system uses a LangGraph-based orchestration pipeline to manage persona selection, conversation flow, state transitions, and memory consolidation. It integrates with the thoughts system to maintain coherent, evolving insights while enabling flexible persona customization and conversation history management.
+The Persona Orchestration Engine coordinates multiple AI personalities (personas) to analyze thoughts, manage conversations, and consolidate insights into durable memory. It implements an agent-based architecture powered by a LangGraph workflow that orchestrates persona reasoning, synthesis, and memory management. The system integrates with knowledge bases, user context, planner data, and relationship insights to deliver personalized, multi-perspective guidance while maintaining conversation continuity and long-term memory growth.
 
 ## Project Structure
-The orchestration engine resides in the backend under the orchestration module. It composes a thought analysis graph from modular nodes, manages state, and coordinates with services for memory, knowledge base, and user context.
+The orchestration module is organized around a LangGraph-based workflow with specialized nodes for memory retrieval, thread loading, prompt building, persona inference, response persistence, synthesis, summary updates, and memory storage. Supporting services provide persona lifecycle management, controller endpoints for streaming and batch interactions, and memory consolidation.
 
 ```mermaid
 graph TB
 subgraph "Orchestration Module"
-OM["OrchestrationModule<br/>imports: KnowledgeBase, Ontology, Dimensions, AgentActions, Skills"]
-OS["OrchestrationService<br/>Graph compiler, context builders"]
-MCS["MemoryConsolidationService<br/>Semantic clustering, contradiction detection"]
+OM["OrchestrationModule<br/>imports: KnowledgeBase, Ontology, Dimensions, Skills, MemoryOS"]
+OS["OrchestrationService<br/>workflow compiler + context builders"]
+OC["OrchestrationController<br/>REST endpoints + throttling"]
 end
 subgraph "Graph Runtime"
-TG["ThoughtAnalysisGraph<br/>Linear chain of nodes"]
-ST["State Annotations<br/>Thought, Thread, Personas, Messages, Memories"]
-end
-subgraph "Nodes"
+TG["createThoughtAnalysisGraph<br/>StateGraph"]
 RM["retrieve_memory"]
 LTH["load_thread_history"]
 BP["build_prompts"]
@@ -55,10 +53,12 @@ TOC["thinking_os_core"]
 US["update_summary"]
 SM["store_memory"]
 end
+subgraph "Supporting Services"
+PS["PersonasService<br/>CRUD + active personas"]
+end
 OM --> OS
-OM --> MCS
+OM --> OC
 OS --> TG
-TG --> ST
 TG --> RM
 TG --> LTH
 TG --> BP
@@ -67,282 +67,315 @@ TG --> SR
 TG --> TOC
 TG --> US
 TG --> SM
+OC --> OS
+OS --> PS
 ```
 
 **Diagram sources**
 - [orchestration.module.ts:11-17](file://backend/src/orchestration/orchestration.module.ts#L11-L17)
 - [thought-analysis.graph.ts:29-67](file://backend/src/orchestration/graph/thought-analysis.graph.ts#L29-L67)
-- [state.ts:88-174](file://backend/src/orchestration/graph/state.ts#L88-L174)
+- [orchestration.controller.ts:17-24](file://backend/src/orchestration/orchestration.controller.ts#L17-L24)
 
 **Section sources**
 - [orchestration.module.ts:1-18](file://backend/src/orchestration/orchestration.module.ts#L1-L18)
-- [orchestration.service.ts:24-74](file://backend/src/orchestration/orchestration.service.ts#L24-L74)
+- [orchestration.controller.ts:17-369](file://backend/src/orchestration/orchestration.controller.ts#L17-L369)
 
 ## Core Components
-- OrchestrationService: Compiles the LangGraph on startup, builds contextual prompts for personas and Core Chat, orchestrates graph execution, and manages persona context injection.
-- Thought Analysis Graph: A linear pipeline of nodes that retrieves memories, loads thread history, builds persona prompts, executes personas, saves responses, synthesizes a Core summary, and consolidates memories.
-- State Management: Strongly typed annotations define inputs, intermediate, and outputs flowing through the graph.
-- Memory Consolidation Service: Periodically clusters and merges semantically similar memories, detects contradictions, and maintains a coherent long-term memory base.
+- OrchestrationService: Compiles the LangGraph on startup, builds contextual prompts for personas, manages Core Chat synthesis, and coordinates memory consolidation.
+- Thought Analysis Graph: A linear StateGraph pipeline that retrieves memories, loads thread history, constructs persona prompts, executes personas, saves responses, synthesizes insights, updates summaries, and stores new memories.
+- Persona Management: PersonasService handles creation, activation, updates, and deletion of user-defined personas, exposing both personal and template personas.
+- Controller Endpoints: Provide batch and streaming APIs for persona replies, Core Chat, voice transcription/synthesis, and memory management.
 
 **Section sources**
-- [orchestration.service.ts:24-74](file://backend/src/orchestration/orchestration.service.ts#L24-L74)
+- [orchestration.service.ts:24-77](file://backend/src/orchestration/orchestration.service.ts#L24-L77)
 - [thought-analysis.graph.ts:15-67](file://backend/src/orchestration/graph/thought-analysis.graph.ts#L15-L67)
-- [state.ts:88-174](file://backend/src/orchestration/graph/state.ts#L88-L174)
-- [memory-consolidation.service.ts:15-27](file://backend/src/orchestration/memory-consolidation.service.ts#L15-L27)
+- [personas.service.ts:6-105](file://backend/src/personas/personas.service.ts#L6-L105)
+- [orchestration.controller.ts:26-369](file://backend/src/orchestration/orchestration.controller.ts#L26-L369)
 
 ## Architecture Overview
-The engine follows an agent-based architecture:
-- Graph-driven orchestration: Nodes encapsulate discrete steps (memory retrieval, prompt building, persona execution, synthesis, memory storage).
-- Persona coordination: Multiple personas operate independently, each with customizable system prompts and models, producing diverse perspectives.
-- Core synthesis: A meta-agent aggregates persona outputs, curates actions, and updates user context.
-- Memory lifecycle: Long-term memories are extracted, stored, and periodically consolidated to prevent bloat and resolve contradictions.
+The engine follows an agent-based design:
+- Input thought and selected personas drive a deterministic graph traversal.
+- Each persona receives a tailored prompt enriched with user context, memory, planner, mood, and relationship data.
+- After persona responses are persisted, a Core synthesis agent curates actions, synthesizes agreement/disagreement, and updates user profile.
+- Long-term memory is extracted and stored, while a running thread summary reduces future prompt sizes.
 
 ```mermaid
 sequenceDiagram
 participant Client as "Client"
+participant Controller as "OrchestrationController"
 participant Service as "OrchestrationService"
-participant Graph as "ThoughtAnalysisGraph"
-participant Node as "Nodes"
-Client->>Service : "Submit thought"
-Service->>Graph : "invoke(state)"
-Graph->>Node : "retrieve_memory"
-Node-->>Graph : "memories"
-Graph->>Node : "load_thread_history"
-Node-->>Graph : "threadMessages + existingSummary"
-Graph->>Node : "build_prompts"
-Node-->>Graph : "personaPrompts"
-Graph->>Node : "run_personas"
-Node-->>Graph : "personaResponses"
-Graph->>Node : "save_responses"
-Node-->>Graph : "responsesSaved"
-Graph->>Node : "thinking_os_core"
-Node-->>Graph : "coreSynthesis + coreActions + profileUpdates"
-Graph->>Node : "update_summary"
-Node-->>Graph : "newSummary"
-Graph->>Node : "store_memory"
-Node-->>Graph : "memoriesStored"
-Graph-->>Service : "final state"
-Service-->>Client : "thread + synthesis + actions"
+participant Graph as "LangGraph"
+participant Nodes as "Graph Nodes"
+Client->>Controller : POST /orchestration/analyze
+Controller->>Service : analyzeThought(userId, thoughtId, personaIds)
+Service->>Graph : compile(createThoughtAnalysisGraph)
+Graph->>Nodes : retrieve_memory
+Nodes-->>Graph : memories
+Graph->>Nodes : load_thread_history
+Nodes-->>Graph : threadMessages, existingSummary
+Graph->>Nodes : build_prompts
+Graph->>Nodes : run_personas
+Nodes-->>Graph : personaResponses
+Graph->>Nodes : save_responses
+Graph->>Nodes : thinking_os_core
+Nodes-->>Graph : coreSynthesis, coreActions, profileUpdates
+Graph->>Nodes : update_summary
+Nodes-->>Graph : newSummary
+Graph->>Nodes : store_memory
+Nodes-->>Graph : memoriesStored
+Graph-->>Service : final state
+Service-->>Controller : result
+Controller-->>Client : response
 ```
 
 **Diagram sources**
+- [orchestration.controller.ts:26-39](file://backend/src/orchestration/orchestration.controller.ts#L26-L39)
+- [orchestration.service.ts:49-77](file://backend/src/orchestration/orchestration.service.ts#L49-L77)
 - [thought-analysis.graph.ts:29-67](file://backend/src/orchestration/graph/thought-analysis.graph.ts#L29-L67)
-- [retrieve-memory.node.ts:15-70](file://backend/src/orchestration/graph/nodes/retrieve-memory.node.ts#L15-L70)
-- [load-thread-history.node.ts:9-26](file://backend/src/orchestration/graph/nodes/load-thread-history.node.ts#L9-L26)
-- [build-prompts.node.ts:72-174](file://backend/src/orchestration/graph/nodes/build-prompts.node.ts#L72-L174)
-- [run-personas.node.ts:80-124](file://backend/src/orchestration/graph/nodes/run-personas.node.ts#L80-L124)
-- [save-responses.node.ts:12-40](file://backend/src/orchestration/graph/nodes/save-responses.node.ts#L12-L40)
-- [thinking-os-core.node.ts:22-247](file://backend/src/orchestration/graph/nodes/thinking-os-core.node.ts#L22-L247)
-- [update-summary.node.ts:10-92](file://backend/src/orchestration/graph/nodes/update-summary.node.ts#L10-L92)
-- [store-memory.node.ts:14-110](file://backend/src/orchestration/graph/nodes/store-memory.node.ts#L14-L110)
 
 ## Detailed Component Analysis
 
-### Thought Analysis Graph
-The graph defines a fixed linear pipeline:
-- retrieve_memory: Semantic vector search for relevant memories with fallback importance-based retrieval.
-- load_thread_history: Loads prior messages and existing thread summary.
-- build_prompts: Assembles persona-specific prompts with user context, calendars, mood, completion stats, pending actions, memory, and recent thread history.
-- run_personas: Executes each persona with retry logic and fallback models.
-- save_responses: Persists persona runs and messages.
-- thinking_os_core: Aggregates persona responses, curates actions, synthesizes insights, and updates user context.
-- update_summary: Generates a concise running summary of the thread.
-- store_memory: Extracts and stores new long-term memories.
+### Thought Analysis Graph and State Management
+The graph defines a linear pipeline with explicit state annotations for inputs, intermediates, and outputs. State fields include user context, persona prompts/responses, thread messages, summaries, and memory operations.
 
 ```mermaid
 flowchart TD
-Start(["Graph Invocation"]) --> Retrieve["retrieve_memory"]
-Retrieve --> History["load_thread_history"]
-History --> Prompts["build_prompts"]
+Start(["Graph Start"]) --> Retrieve["retrieve_memory"]
+Retrieve --> Load["load_thread_history"]
+Load --> Prompts["build_prompts"]
 Prompts --> Run["run_personas"]
 Run --> Save["save_responses"]
 Save --> Core["thinking_os_core"]
 Core --> Summary["update_summary"]
 Summary --> Store["store_memory"]
-Store --> End(["Graph Complete"])
+Store --> End(["Graph End"])
 ```
 
 **Diagram sources**
-- [thought-analysis.graph.ts:46-64](file://backend/src/orchestration/graph/thought-analysis.graph.ts#L46-L64)
-
-**Section sources**
-- [thought-analysis.graph.ts:15-67](file://backend/src/orchestration/graph/thought-analysis.graph.ts#L15-L67)
-
-### State Management
-The state defines typed annotations for:
-- Inputs: userId, thought, thread, personas, userContext, calendarContext, moodContext, completionStatsContext, pendingActionsContext.
-- Intermediates: memories, threadMessages, existingSummary, personaPrompts, personaResponses, newSummary, memoriesStored, responsesSaved.
-- Outputs: coreSynthesis, coreActions, profileUpdates.
-
-```mermaid
-classDiagram
-class ThoughtAnalysisState {
-+userId : string
-+thought : ThoughtData
-+thread : ThreadData
-+personas : PersonaData[]
-+userContext : UserContextData
-+calendarContext : string
-+moodContext : string
-+completionStatsContext : string
-+pendingActionsContext : string
-+memories : MemoryData[]
-+threadMessages : MessageData[]
-+existingSummary : string
-+personaPrompts : PersonaPrompt[]
-+personaResponses : PersonaResponse[]
-+newSummary : string
-+memoriesStored : boolean
-+responsesSaved : boolean
-+coreSynthesis : string
-+coreActions : Action[]
-+profileUpdates : Record
-}
-```
-
-**Diagram sources**
+- [thought-analysis.graph.ts:45-64](file://backend/src/orchestration/graph/thought-analysis.graph.ts#L45-L64)
 - [state.ts:88-174](file://backend/src/orchestration/graph/state.ts#L88-L174)
 
 **Section sources**
-- [state.ts:64-174](file://backend/src/orchestration/graph/state.ts#L64-L174)
+- [thought-analysis.graph.ts:15-67](file://backend/src/orchestration/graph/thought-analysis.graph.ts#L15-L67)
+- [state.ts:1-177](file://backend/src/orchestration/graph/state.ts#L1-L177)
 
-### Persona Selection Criteria
-- Personas are loaded per user and include both personal personas and shared template personas.
-- Each persona has a system prompt and optional model override.
-- The graph iterates over selected personas, constructing tailored prompts and invoking LLMs with robust retry and fallback logic.
-
-**Section sources**
-- [orchestration.service.ts:770-779](file://backend/src/orchestration/orchestration.service.ts#L770-L779)
-- [build-prompts.node.ts:72-174](file://backend/src/orchestration/graph/nodes/build-prompts.node.ts#L72-L174)
-- [run-personas.node.ts:80-124](file://backend/src/orchestration/graph/nodes/run-personas.node.ts#L80-L124)
-
-### Conversation Flow Management
-- Thread continuity: The loader node fetches prior messages and existing summary to minimize prompt size and maintain coherence.
-- Prompt construction: The builder node assembles persona prompts with layered context (user profile, schedule, mood, completion patterns, pending actions, memory, thread history, and the current thought).
-- Response persistence: The saver node records persona runs and assistant messages; the Core node adds a synthesis message.
-- Summary maintenance: The updater node creates or updates a running summary after each cycle.
-
-**Section sources**
-- [load-thread-history.node.ts:9-26](file://backend/src/orchestration/graph/nodes/load-thread-history.node.ts#L9-L26)
-- [build-prompts.node.ts:72-174](file://backend/src/orchestration/graph/nodes/build-prompts.node.ts#L72-L174)
-- [save-responses.node.ts:12-40](file://backend/src/orchestration/graph/nodes/save-responses.node.ts#L12-L40)
-- [thinking-os-core.node.ts:22-247](file://backend/src/orchestration/graph/nodes/thinking-os-core.node.ts#L22-L247)
-- [update-summary.node.ts:10-92](file://backend/src/orchestration/graph/nodes/update-summary.node.ts#L10-L92)
-
-### Core Chat Agent Functionality
-- The service constructs a broader context for Core Chat, including user profile, memories, planner stats, relationships, events, connections, messages, shared notes, session summaries, and available personas.
-- Context classification scopes planner, life review, memory recall, and messaging domains to optimize relevance.
-- The Core Chat context is injected into the system prompt for unified reasoning.
-
-**Section sources**
-- [orchestration.service.ts:660-764](file://backend/src/orchestration/orchestration.service.ts#L660-L764)
-
-### Persona Customization Options
-- Each persona includes a system prompt and optional model override.
-- Knowledge base RAG chunks can be injected into persona prompts for domain-specific guidance.
-- Calendar, mood, completion patterns, and pending actions are dynamically appended to persona prompts.
-
-**Section sources**
-- [build-prompts.node.ts:72-117](file://backend/src/orchestration/graph/nodes/build-prompts.node.ts#L72-L117)
-- [state.ts:21-28](file://backend/src/orchestration/graph/state.ts#L21-L28)
-
-### Conversation History Management
-- Messages are persisted per thread with timestamps and persona attribution.
-- A running summary is maintained and reused to reduce context size.
-- The loader node ensures continuity by including recent messages and the existing summary.
-
-**Section sources**
-- [save-responses.node.ts:12-40](file://backend/src/orchestration/graph/nodes/save-responses.node.ts#L12-L40)
-- [update-summary.node.ts:10-92](file://backend/src/orchestration/graph/nodes/update-summary.node.ts#L10-L92)
-- [load-thread-history.node.ts:9-26](file://backend/src/orchestration/graph/nodes/load-thread-history.node.ts#L9-L26)
-
-### Memory Consolidation Workflows
-- Semantic clustering identifies similar memories using cosine similarity.
-- Contradictions are detected and resolved by marking older memories as superseded.
-- High-quality clusters are synthesized into consolidated memories with preserved importance and memory type.
+### Memory Retrieval Node
+Retrieves relevant long-term memories using semantic vector similarity with a composite scoring formula, falling back to importance-based retrieval if embeddings fail. Access counts are tracked asynchronously.
 
 ```mermaid
 flowchart TD
-MC_Start(["Consolidation Trigger"]) --> Fetch["Fetch active memories with embeddings"]
-Fetch --> Cluster["Build similarity clusters (cosine > 0.80)"]
-Cluster --> Contradictions["Detect contradictions within clusters"]
-Contradictions --> Resolve["Mark contradictory memories as superseded"]
-Resolve --> Synthesize["Synthesize cluster into consolidated memory"]
-Synthesize --> Store["Store consolidated memory (dedup)"]
-Store --> Update["Update old memories to consolidated status"]
-Update --> MC_End(["Consolidation Complete"])
+A["retrieve_memory(node)"] --> B["Build search text from thought"]
+B --> C["Generate embedding"]
+C --> D{"Embedding OK?"}
+D -- Yes --> E["Vector similarity query with composite score"]
+D -- No --> F["Importance-based retrieval fallback"]
+E --> G["Track memory access (fire-and-forget)"]
+F --> H["Track memory access (fire-and-forget)"]
+G --> I["Return memories"]
+H --> I
 ```
 
 **Diagram sources**
-- [memory-consolidation.service.ts:29-127](file://backend/src/orchestration/memory-consolidation.service.ts#L29-L127)
+- [retrieve-memory.node.ts:11-71](file://backend/src/orchestration/graph/nodes/retrieve-memory.node.ts#L11-L71)
 
 **Section sources**
-- [memory-consolidation.service.ts:15-305](file://backend/src/orchestration/memory-consolidation.service.ts#L15-L305)
+- [retrieve-memory.node.ts:1-72](file://backend/src/orchestration/graph/nodes/retrieve-memory.node.ts#L1-L72)
 
-### Persona Switching Mechanisms
-- The graph iterates through the provided personas list, generating persona-specific prompts and executing them sequentially.
-- Each persona’s model override is respected; otherwise, the default model is used.
-- Retry logic and fallback models ensure robust execution across persona invocations.
+### Thread History Loader
+Loads all messages for continuity and fetches an existing thread summary to reduce prompt size.
 
 **Section sources**
-- [run-personas.node.ts:80-124](file://backend/src/orchestration/graph/nodes/run-personas.node.ts#L80-L124)
-- [state.ts:93-93](file://backend/src/orchestration/graph/state.ts#L93-L93)
+- [load-thread-history.node.ts:1-28](file://backend/src/orchestration/graph/nodes/load-thread-history.node.ts#L1-L28)
 
-### Examples of Persona Interactions and Conversation Threads
-- Persona interactions: Each persona responds independently to the same thought, producing distinct perspectives captured in personaPrompts and personaResponses.
-- Conversation threads: Messages are stored with roles and timestamps; a running summary is maintained to guide subsequent iterations.
-- AI personality behaviors: Personality-specific system prompts and optional RAG knowledge influence tone, depth, and domain expertise.
+### Prompt Builder
+Constructs persona-specific prompts by combining:
+- Universal user context (name, role, goals, values, etc.)
+- Calendar and planner context
+- Mood and energy context
+- Knowledge base chunks (RAG)
+- Task completion patterns
+- Pending actions
+- Existing thread summary
+- Relevant memories with timestamps
+- Recent thread messages (excluding the latest user message)
+- Current thought as the final user message with date tagging
 
-**Section sources**
+```mermaid
+flowchart TD
+S["build_prompts(node)"] --> P["For each persona"]
+P --> U["Append universal user context"]
+U --> Cal["Append calendar context"]
+Cal --> Mood["Append mood context"]
+Mood --> RAG["Append RAG chunks (if available)"]
+RAG --> Stats["Append completion stats"]
+Stats --> Actions["Append pending actions"]
+Actions --> Sum["Append existing summary"]
+Sum --> Mem["Append memories with timestamps"]
+Mem --> Hist["Append recent thread messages (skip latest user)"]
+Hist --> Thought["Append current thought (tagged with date)"]
+Thought --> O["Output personaPrompts[]"]
+```
+
+**Diagram sources**
 - [build-prompts.node.ts:72-174](file://backend/src/orchestration/graph/nodes/build-prompts.node.ts#L72-L174)
+
+**Section sources**
+- [build-prompts.node.ts:1-175](file://backend/src/orchestration/graph/nodes/build-prompts.node.ts#L1-L175)
+
+### Persona Execution and Retry Logic
+Each persona prompt is executed against its configured model or a default model. Retry logic attempts multiple models with exponential backoff for rate-limit and server errors.
+
+```mermaid
+flowchart TD
+A["run_personas(node)"] --> B["For each personaPrompt"]
+B --> C["Select model (persona.modelName || default)"]
+C --> D["invokeWithRetry(models[], langchainMessages)"]
+D --> E{"Success?"}
+E -- Yes --> F["Collect PersonaResponse"]
+E -- No --> G["Fallback error response"]
+F --> H["Return personaResponses"]
+G --> H
+```
+
+**Diagram sources**
 - [run-personas.node.ts:80-124](file://backend/src/orchestration/graph/nodes/run-personas.node.ts#L80-L124)
-- [save-responses.node.ts:12-40](file://backend/src/orchestration/graph/nodes/save-responses.node.ts#L12-L40)
-- [update-summary.node.ts:10-92](file://backend/src/orchestration/graph/nodes/update-summary.node.ts#L10-L92)
+
+**Section sources**
+- [run-personas.node.ts:1-125](file://backend/src/orchestration/graph/nodes/run-personas.node.ts#L1-L125)
+
+### Response Persistence
+Persists persona runs and messages to the database, enabling history retrieval and synthesis.
+
+**Section sources**
+- [save-responses.node.ts:1-41](file://backend/src/orchestration/graph/nodes/save-responses.node.ts#L1-L41)
+
+### Core Synthesis Agent
+After responses are saved, the Core agent:
+- Curates overlapping suggestions into 2–5 distinct actions
+- Produces a concise synthesis highlighting agreement, disagreement, and key takeaway
+- Updates user profile fields when new information is revealed
+
+```mermaid
+flowchart TD
+A["thinking_os_core(node)"] --> B["Build user context string"]
+B --> C["Aggregate persona responses"]
+C --> D["Fetch existing pending actions"]
+D --> E["Compose system + user prompts"]
+E --> F["LLM invoke (JSON)"]
+F --> G["Parse JSON (fallback to fenced JSON)"]
+G --> H["Extract synthesis, actions, profileUpdates"]
+H --> I["Create actions (dedupe + merge)"]
+I --> J["Merge/apply profile updates to UserContext"]
+J --> K["Persist synthesis as thread message"]
+K --> L["Return coreSynthesis, coreActions, profileUpdates"]
+```
+
+**Diagram sources**
+- [thinking-os-core.node.ts:22-247](file://backend/src/orchestration/graph/nodes/thinking-os-core.node.ts#L22-L247)
+
+**Section sources**
+- [thinking-os-core.node.ts:1-248](file://backend/src/orchestration/graph/nodes/thinking-os-core.node.ts#L1-L248)
+
+### Summary Update
+Generates a concise running summary of the thread to reduce future prompt sizes and improve efficiency.
+
+**Section sources**
+- [update-summary.node.ts:1-93](file://backend/src/orchestration/graph/nodes/update-summary.node.ts#L1-L93)
+
+### Memory Consolidation
+Extracts 1–3 key facts from the conversation and stores them as durable memories with deduplication and importance weighting.
+
+**Section sources**
+- [store-memory.node.ts:1-111](file://backend/src/orchestration/graph/nodes/store-memory.node.ts#L1-L111)
+
+### Persona Lifecycle Management
+PersonasService supports:
+- Creating user-defined personas with system prompts and model preferences
+- Listing active personas (user’s own + templates)
+- Updating and soft-deleting personas (templates cannot be modified)
+
+**Section sources**
+- [personas.service.ts:6-105](file://backend/src/personas/personas.service.ts#L6-L105)
+
+### Conversation Flow Management
+The controller exposes endpoints for:
+- Batch thought analysis with multiple personas
+- Single persona replies (streaming and non-streaming)
+- Quick chat and Core Chat (streaming and non-streaming)
+- Voice transcription and speech synthesis
+- Persona-direct chat with history and clearing
+- Memory listing, search, stats, creation, updates, and deletion
+- Memory consolidation and session summaries
+
+```mermaid
+sequenceDiagram
+participant Client as "Client"
+participant Controller as "OrchestrationController"
+participant Service as "OrchestrationService"
+Client->>Controller : POST /orchestration/reply-persona/stream
+Controller->>Service : replyToPersonaStream(userId, thoughtId, personaId, message)
+Service-->>Controller : Stream events (response, done)
+Controller-->>Client : SSE stream
+```
+
+**Diagram sources**
+- [orchestration.controller.ts:58-94](file://backend/src/orchestration/orchestration.controller.ts#L58-L94)
+
+**Section sources**
+- [orchestration.controller.ts:26-369](file://backend/src/orchestration/orchestration.controller.ts#L26-L369)
 
 ## Dependency Analysis
-The orchestration module imports supporting modules and exposes services for orchestration and memory consolidation. The OrchestrationService depends on Prisma, configuration, knowledge base, memory consolidation, ontology, dimensions, agent actions, and skills.
+The orchestration module composes multiple domain services and the LangGraph runtime. Dependencies include:
+- PrismaService for persistence
+- KnowledgeBaseService for RAG
+- MemoryConsolidationService for memory lifecycle
+- OntologyService, DimensionsService, SkillsService for enriched context
+- Memory Manager and Context Builder for advanced memory orchestration
 
 ```mermaid
 graph LR
-OM["OrchestrationModule"] --> OS["OrchestrationService"]
-OM --> MCS["MemoryConsolidationService"]
-OS --> PRISMA["PrismaService"]
-OS --> CFG["ConfigService"]
+OS["OrchestrationService"] --> PRISMA["PrismaService"]
 OS --> KBS["KnowledgeBaseService"]
-OS --> ONS["OntologyService"]
+OS --> MCS["MemoryConsolidationService"]
+OS --> ONT["OntologyService"]
 OS --> DIM["DimensionsService"]
-OS --> AAS["AgentActionsService"]
-OS --> SKS["SkillsService"]
+OS --> SK["SkillsService"]
+OS --> MM["MemoryManagerService"]
+OS --> CB["ContextBuilderService"]
+OS --> PD["PatternDetectorService"]
 ```
 
 **Diagram sources**
-- [orchestration.module.ts:11-17](file://backend/src/orchestration/orchestration.module.ts#L11-L17)
-- [orchestration.service.ts:32-41](file://backend/src/orchestration/orchestration.service.ts#L32-L41)
+- [orchestration.service.ts:33-44](file://backend/src/orchestration/orchestration.service.ts#L33-L44)
+- [orchestration.module.ts:11-16](file://backend/src/orchestration/orchestration.module.ts#L11-L16)
 
 **Section sources**
-- [orchestration.module.ts:11-17](file://backend/src/orchestration/orchestration.module.ts#L11-L17)
-- [orchestration.service.ts:32-41](file://backend/src/orchestration/orchestration.service.ts#L32-L41)
+- [orchestration.module.ts:1-18](file://backend/src/orchestration/orchestration.module.ts#L1-L18)
+- [orchestration.service.ts:1-44](file://backend/src/orchestration/orchestration.service.ts#L1-L44)
 
 ## Performance Considerations
-- Embedding-based memory retrieval uses composite scoring (similarity, importance, access frequency, recency) with a fallback to importance-based retrieval.
-- Persona execution employs exponential backoff retries and fallback models to mitigate rate limits and server errors.
-- Summary generation and memory extraction use conservative token limits to balance quality and cost.
-- Memory consolidation runs periodically to prevent prompt bloat and maintain coherence.
+- Streaming endpoints use Server-Sent Events to progressively deliver persona responses and Core synthesis, reducing perceived latency.
+- Retry and fallback logic for LLM calls improves reliability under rate limits and transient failures.
+- Semantic memory retrieval uses vector similarity with composite scoring; importance-based fallback ensures robustness.
+- Running summaries and persisted persona runs enable efficient context reuse across sessions.
+- Throttling guards protect resource consumption at both IP and user levels.
 
 [No sources needed since this section provides general guidance]
 
 ## Troubleshooting Guide
-- API keys: Missing or invalid OpenRouter API key prevents persona responses; warnings are logged during initialization.
-- Rate limits and server errors: The run_personas node implements retry with exponential backoff and fallback models.
-- Memory retrieval failures: Semantic search falls back to importance-based retrieval; access counts are tracked for analytics.
-- Summary and memory extraction failures: Graceful fallbacks create minimal summaries and basic memories.
+Common issues and mitigations:
+- Missing or invalid OpenRouter API key: The service logs warnings during initialization and persona inference will fail without a valid key.
+- Rate limiting and server errors: invokeWithRetry implements exponential backoff across multiple models to mitigate transient failures.
+- Memory retrieval failures: Vector similarity queries fall back to importance-based retrieval; access counts are tracked regardless.
+- Core synthesis parsing errors: The Core node extracts JSON from fenced content if needed; otherwise returns empty outputs gracefully.
+- Persona editing restrictions: Template personas cannot be edited or deleted; users must create their own copies.
 
 **Section sources**
-- [orchestration.service.ts:56-61](file://backend/src/orchestration/orchestration.service.ts#L56-L61)
+- [orchestration.service.ts:49-77](file://backend/src/orchestration/orchestration.service.ts#L49-L77)
 - [run-personas.node.ts:25-72](file://backend/src/orchestration/graph/nodes/run-personas.node.ts#L25-L72)
-- [retrieve-memory.node.ts:51-70](file://backend/src/orchestration/graph/nodes/retrieve-memory.node.ts#L51-L70)
-- [update-summary.node.ts:72-91](file://backend/src/orchestration/graph/nodes/update-summary.node.ts#L72-L91)
-- [store-memory.node.ts:94-110](file://backend/src/orchestration/graph/nodes/store-memory.node.ts#L94-L110)
+- [retrieve-memory.node.ts:51-53](file://backend/src/orchestration/graph/nodes/retrieve-memory.node.ts#L51-L53)
+- [thinking-os-core.node.ts:126-138](file://backend/src/orchestration/graph/nodes/thinking-os-core.node.ts#L126-L138)
+- [personas.service.ts:70-96](file://backend/src/personas/personas.service.ts#L70-L96)
 
 ## Conclusion
-The persona orchestration engine provides a scalable, modular framework for coordinating multiple AI personalities around thought analysis and conversation. Its graph-based design, robust retry mechanisms, and integrated memory consolidation ensure reliable, coherent, and evolving insights. The system balances flexibility (customizable personas and RAG) with performance (semantic retrieval, summarization, and consolidation) to support deep, iterative reflection.
+The Persona Orchestration Engine delivers a scalable, multi-agent system for thought analysis and conversation synthesis. Its LangGraph-based workflow ensures predictable, extensible processing of persona interactions, while integrated memory and context systems foster continuous learning and personalized guidance. The modular design, robust error handling, and streaming capabilities provide a solid foundation for evolving AI-driven introspection and decision-making experiences.

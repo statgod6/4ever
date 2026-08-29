@@ -1,0 +1,3 @@
+- **Core Services**: `MemoryManagerService` handles CRUD operations, LLM-based classification, vector deduplication, and composite ranking retrieval; `ContextBuilderService` assembles prioritized context blocks for agent prompts based on message scope.
+- **Lifecycle & Discovery**: `DecayService` runs a scheduled cron job to apply exponential strength decay and auto-archive weak memories; `PatternDetectorService` triggers LLM-driven pattern analysis after memory count thresholds are met.
+- **Integration**: The module exports its services to `OrchestrationModule`, utilizing `classifyContextScope` to dynamically inject relevant goals, identity, and episodic data into system prompts while enforcing token budgets.

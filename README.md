@@ -60,10 +60,15 @@ cp .env.example .env
 # Edit .env with your API keys
 ```
 
-3. **Start PostgreSQL with Docker:**
+3. **Start only PostgreSQL with Docker Desktop:**
 ```bash
-docker-compose up -d postgres
+docker compose up -d postgres
+docker compose ps postgres
 ```
+
+This keeps the backend and frontend running directly on your laptop while the
+PostgreSQL + pgvector database runs in Docker. The database is reachable only
+from the laptop at `localhost:5432` and its data persists in a Docker volume.
 
 4. **Run database migrations:**
 ```bash
@@ -90,7 +95,7 @@ Navigate to http://localhost:5173
 To run the entire stack with Docker:
 
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 This will start:

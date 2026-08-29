@@ -172,10 +172,10 @@ export default function ThoughtDetailScreen({ route, navigation }: Props) {
         thoughtId, replyingTo.personaId, replyText.trim(),
         (event: StreamEvent) => {
           if (event.event === 'thinking_delta') {
-            thinkAccum += event.data.chunk || ''
+            thinkAccum += event.data.chunk || event.data.text || ''
             setStreamingThinking(thinkAccum)
           } else if (event.event === 'token') {
-            accum += event.data.chunk || ''
+            accum += event.data.text || event.data.chunk || ''
             setStreamingReply(accum)
           } else if (event.event === 'response') {
             setStreamingReply(event.data.text || accum)

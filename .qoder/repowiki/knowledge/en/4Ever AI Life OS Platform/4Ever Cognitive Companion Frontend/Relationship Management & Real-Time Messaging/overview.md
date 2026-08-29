@@ -1,1 +1,0 @@
-Manages personal relationship data, social connections, and real-time direct messaging with AI-mediated conflict resolution.

@@ -16,8 +16,21 @@
 - [backend/src/app.module.ts](file://backend/src/app.module.ts)
 - [backend/prisma/schema.prisma](file://backend/prisma/schema.prisma)
 - [backend/check-db.sql](file://backend/check-db.sql)
+- [backend/src/auth/auth.service.ts](file://backend/src/auth/auth.service.ts)
+- [backend/src/auth/auth.controller.ts](file://backend/src/auth/auth.controller.ts)
+- [backend/src/auth/dto/request-otp.dto.ts](file://backend/src/auth/dto/request-otp.dto.ts)
+- [backend/src/auth/dto/verify-otp.dto.ts](file://backend/src/auth/dto/verify-otp.dto.ts)
+- [backend/prisma/migrations/20260425194007_phone_otp_auth/migration.sql](file://backend/prisma/migrations/20260425194007_phone_otp_auth/migration.sql)
 - [scripts/scan-secrets.js](file://scripts/scan-secrets.js)
 </cite>
+
+## Update Summary
+**Changes Made**
+- Added AWS SNS SMS OTP functionality documentation
+- Updated environment variable management section to include AWS credential requirements
+- Enhanced security considerations with AWS credential configuration
+- Updated deployment workflows to include AWS credential setup
+- Added AWS region and sender ID configuration details
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -33,6 +46,8 @@
 
 ## Introduction
 This document provides comprehensive deployment and infrastructure guidance for the 4Ever application. It covers containerization with Docker multi-stage builds, orchestration via docker-compose for local development and multi-container deployment, cloud platform configurations for Fly.io and Railway, database provisioning with PostgreSQL and pgvector, monitoring and logging with Sentry and Pino, health checks, security hardening, environment variable management, scaling strategies, and operational procedures including rollouts and rollbacks.
+
+**Updated** Added AWS SNS SMS OTP functionality for phone-based authentication, including credential configuration and regional setup.
 
 ## Project Structure
 The repository is organized into three primary areas:
@@ -53,6 +68,7 @@ BHealth["backend/src/health/health.controller.ts"]
 BSentry["backend/src/sentry.ts"]
 BApp["backend/src/app.module.ts"]
 BPrisma["backend/prisma/schema.prisma"]
+BAWS["AWS SNS Integration"]
 end
 subgraph "Frontend"
 FDF["frontend/Dockerfile"]
@@ -69,6 +85,7 @@ DC --> BHealth
 DC --> BSentry
 DC --> BApp
 DC --> BPrisma
+DC --> BAWS
 Fly --> BDF
 Rail --> BDF
 ```
@@ -110,6 +127,10 @@ Rail --> BDF
 - Security and Secrets
   - Environment hardening enforced by requiring secrets at startup; pre-push secret scanning script.
   - CORS origins enforced in production; Helmet security headers; upload serving disabled in production.
+- **AWS SNS Integration**
+  - SMS OTP functionality using AWS SNS client for transactional SMS delivery.
+  - Regional configuration support with default ap-south-1 for India compliance.
+  - Sender ID configuration for DLT-registered senders in India.
 
 **Section sources**
 - [backend/Dockerfile:1-83](file://backend/Dockerfile#L1-L83)
@@ -123,18 +144,21 @@ Rail --> BDF
 - [backend/src/app.module.ts:48-124](file://backend/src/app.module.ts#L48-L124)
 - [backend/src/health/health.controller.ts:14-121](file://backend/src/health/health.controller.ts#L14-L121)
 - [scripts/scan-secrets.js:1-132](file://scripts/scan-secrets.js#L1-L132)
+- [backend/src/auth/auth.service.ts:6-44](file://backend/src/auth/auth.service.ts#L6-L44)
 
 ## Architecture Overview
 The deployment architecture supports local development and cloud production with clear separation of concerns:
 - Local development uses docker-compose to spin up Postgres with pgvector, the backend API, and the frontend with reverse proxy.
 - Cloud platforms (Fly.io, Railway) run the backend containerized with health checks and rolling deploys.
 - Database migrations are executed at deploy time; uploads are configured for persistence or migration to object storage in production.
+- **AWS SNS Integration** provides SMS OTP functionality with regional configuration and sender ID support.
 
 ```mermaid
 graph TB
 Client["Browser / Mobile App"] --> FE["Nginx Frontend<br/>Reverse Proxy /api -> backend"]
 FE --> BE["NestJS Backend"]
 BE --> DB["PostgreSQL + pgvector"]
+BE --> SNS["AWS SNS SMS Service"]
 BE --> Sentry["Sentry Error Tracking"]
 BE --> Pino["Pino Structured Logs"]
 subgraph "Orchestrators"
@@ -181,7 +205,7 @@ C --> D["ENTRYPOINT dumb-init + CMD node dist/main.js"]
 ### Frontend Containerization Strategy
 The frontend Dockerfile:
 - builder stage compiles the Vite bundle.
-- runtime stage serves the bundle via nginxinc/nginx-unprivileged with security headers and a reverse proxy to the backend’s /api path.
+- runtime stage serves the bundle via nginxinc/nginx-unprivileged with security headers and a reverse proxy to the backend's /api path.
 - Health check probes the root path.
 
 ```mermaid
@@ -273,6 +297,8 @@ Prisma schema:
 - Models define entities and relationships; vector columns are handled via raw SQL in migrations.
 - Migration commands are available in package.json for development and production.
 
+**Updated** Added phone-based authentication with OTP codes table for SMS verification functionality.
+
 ```mermaid
 erDiagram
 USER {
@@ -311,20 +337,32 @@ string source
 datetime created_at
 datetime updated_at
 }
+OTP_CODE {
+string id PK
+string phone_number
+string code
+timestamp expires_at
+int attempts
+boolean verified
+timestamp created_at
+}
 THOUGHT ||--o{ THOUGHT_THREAD : "has"
 USER ||--o{ THOUGHT : "writes"
 USER ||--o{ MEMORY : "owns"
+USER ||--o{ OTP_CODE : "requests"
 ```
 
 **Diagram sources**
 - [backend/prisma/schema.prisma:12-74](file://backend/prisma/schema.prisma#L12-L74)
 - [backend/prisma/schema.prisma:76-91](file://backend/prisma/schema.prisma#L76-L91)
 - [backend/prisma/schema.prisma:170-191](file://backend/prisma/schema.prisma#L170-L191)
+- [backend/prisma/migrations/20260425194007_phone_otp_auth/migration.sql:30-45](file://backend/prisma/migrations/20260425194007_phone_otp_auth/migration.sql#L30-L45)
 
 **Section sources**
 - [backend/prisma/schema.prisma:1-10](file://backend/prisma/schema.prisma#L1-L10)
 - [backend/check-db.sql:1-8](file://backend/check-db.sql#L1-L8)
 - [backend/package.json:21-25](file://backend/package.json#L21-L25)
+- [backend/prisma/migrations/20260425194007_phone_otp_auth/migration.sql:1-45](file://backend/prisma/migrations/20260425194007_phone_otp_auth/migration.sql#L1-L45)
 
 ### Monitoring and Logging Setup
 - Sentry
@@ -371,6 +409,10 @@ Note over Backend,Sentry : Unhandled errors captured and sent to Sentry
 - Secrets Management
   - fly secrets set is used to manage environment variables.
   - Pre-push secret scanner scans for high-confidence secret patterns and exits non-zero on findings.
+- **AWS SNS Security**
+  - AWS credentials are loaded via environment variables with placeholder detection.
+  - Credentials are validated before initializing SNS client to prevent accidental activation.
+  - Region configuration defaults to ap-south-1 for India compliance with DLT requirements.
 
 ```mermaid
 flowchart TD
@@ -378,7 +420,11 @@ Start(["Startup"]) --> CheckSecrets["Check required env vars (JWT_SECRET, DB URL
 CheckSecrets --> SecretsOK{"All present?"}
 SecretsOK --> |No| Fail["Fail fast: exit non-zero"]
 SecretsOK --> |Yes| Init["Initialize Sentry + Pino + Guards"]
-Init --> Serve["Listen on PORT with security headers"]
+Init --> CheckAWS["Load AWS Credentials"]
+CheckAWS --> AWSCreds{"Valid AWS creds?"}
+AWSCreds --> |No| Init["Initialize without SNS"]
+AWSCreds --> |Yes| InitSNS["Initialize SNS Client"]
+InitSNS --> Serve["Listen on PORT with security headers"]
 ```
 
 **Diagram sources**
@@ -386,25 +432,31 @@ Init --> Serve["Listen on PORT with security headers"]
 - [backend/src/main.ts:20-22](file://backend/src/main.ts#L20-L22)
 - [backend/Dockerfile:29-40](file://backend/Dockerfile#L29-L40)
 - [scripts/scan-secrets.js:24-39](file://scripts/scan-secrets.js#L24-L39)
+- [backend/src/auth/auth.service.ts:21-44](file://backend/src/auth/auth.service.ts#L21-L44)
 
 **Section sources**
 - [backend/src/main.ts:68-75](file://backend/src/main.ts#L68-L75)
 - [backend/Dockerfile:29-40](file://backend/Dockerfile#L29-L40)
 - [scripts/scan-secrets.js:1-132](file://scripts/scan-secrets.js#L1-L132)
+- [backend/src/auth/auth.service.ts:21-44](file://backend/src/auth/auth.service.ts#L21-L44)
 
 ### Environment Variable Management
 - docker-compose
   - Required: DATABASE_URL, JWT_SECRET (fails if empty).
   - Optional: OPENROUTER_API_KEY, TWILIO_* credentials, TAVILY_API_KEY, E2B_API_KEY, ADMIN_SECRET, CORS_ORIGINS, TTS_MODEL.
+  - **AWS SNS**: AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SNS_SENDER_ID.
 - fly.toml
   - Sets NODE_ENV, PORT, LOG_LEVEL, CORS_ORIGINS via secrets, and forces HTTPS.
 - railway.json
   - Uses environment variables via secrets and health checks.
 
+**Updated** Added AWS SNS credential environment variables for SMS OTP functionality.
+
 **Section sources**
 - [docker-compose.yml:24-40](file://docker-compose.yml#L24-L40)
 - [backend/fly.toml:26-30](file://backend/fly.toml#L26-L30)
 - [backend/railway.json:1-15](file://backend/railway.json#L1-L15)
+- [backend/src/auth/auth.service.ts:21-24](file://backend/src/auth/auth.service.ts#L21-L24)
 
 ### Scaling Strategies
 - Fly.io guidance:
@@ -446,6 +498,42 @@ Init --> Serve["Listen on PORT with security headers"]
 - [backend/src/sentry.ts:27-48](file://backend/src/sentry.ts#L27-L48)
 - [scripts/scan-secrets.js:68-95](file://scripts/scan-secrets.js#L68-L95)
 
+### AWS SNS SMS OTP Integration
+**New Section** The backend now includes AWS SNS integration for SMS OTP functionality:
+
+- **Dependency**: @aws-sdk/client-sns v3.1077.0 is included in package.json dependencies.
+- **Configuration**: 
+  - AWS_REGION: Defaults to ap-south-1 for India compliance
+  - AWS_ACCESS_KEY_ID: Primary credential for SNS access
+  - AWS_SECRET_ACCESS_KEY: Secret credential for SNS access
+  - AWS_SNS_SENDER_ID: Optional sender ID for DLT-registered senders
+- **Initialization**: SNS client is created only when valid credentials are detected, preventing accidental activation with placeholder values.
+- **Message Attributes**: Automatically sets SMSType to Transactional for OTP delivery and includes SenderID when configured.
+- **Regional Support**: Supports multiple AWS regions with proper credential configuration.
+
+```mermaid
+flowchart TD
+AWSInit["AWS Credentials Loaded"] --> CheckCreds{"Valid creds?"}
+CheckCreds --> |No| NoSNS["SNS Disabled"]
+CheckCreds --> |Yes| CreateClient["Create SNS Client"]
+CreateClient --> OTPFlow["OTP Request Flow"]
+OTPFlow --> ValidatePhone["Validate Phone Number"]
+ValidatePhone --> RateLimit["Check Rate Limits"]
+RateLimit --> GenCode["Generate 6-Digit Code"]
+GenCode --> StoreOTP["Store in Database"]
+StoreOTP --> SendSMS["Send via AWS SNS"]
+SendSMS --> Success["Return Success"]
+```
+
+**Diagram sources**
+- [backend/src/auth/auth.service.ts:31-44](file://backend/src/auth/auth.service.ts#L31-L44)
+- [backend/src/auth/auth.service.ts:50-116](file://backend/src/auth/auth.service.ts#L50-L116)
+
+**Section sources**
+- [backend/package.json:28](file://backend/package.json#L28)
+- [backend/src/auth/auth.service.ts:6-44](file://backend/src/auth/auth.service.ts#L6-L44)
+- [backend/src/auth/auth.service.ts:50-116](file://backend/src/auth/auth.service.ts#L50-L116)
+
 ## Dependency Analysis
 The backend module composition integrates logging, scheduling, throttling, Prisma, and feature modules. Health endpoints are provided by HealthModule.
 
@@ -457,15 +545,18 @@ App --> Throttler["ThrottlerModule"]
 App --> Prisma["PrismaModule"]
 App --> Health["HealthModule"]
 App --> Features["Feature Modules (Auth, Users, etc.)"]
+Features --> Auth["Auth Module with AWS SNS"]
 ```
 
 **Diagram sources**
 - [backend/src/app.module.ts:34-172](file://backend/src/app.module.ts#L34-L172)
 - [backend/src/health/health.controller.ts:14-121](file://backend/src/health/health.controller.ts#L14-L121)
+- [backend/src/auth/auth.service.ts:10-44](file://backend/src/auth/auth.service.ts#L10-L44)
 
 **Section sources**
 - [backend/src/app.module.ts:1-172](file://backend/src/app.module.ts#L1-L172)
 - [backend/src/health/health.controller.ts:1-121](file://backend/src/health/health.controller.ts#L1-L121)
+- [backend/src/auth/auth.service.ts:10-44](file://backend/src/auth/auth.service.ts#L10-L44)
 
 ## Performance Considerations
 - Container Images
@@ -477,11 +568,16 @@ App --> Features["Feature Modules (Auth, Users, etc.)"]
   - Prisma client is generated in the build stage; migrations run at deploy time.
 - CDN and Assets
   - Frontend nginx serves static assets efficiently; reverse proxy preserves streaming.
+- **AWS SNS Optimization**
+  - SNS client is lazily initialized only when credentials are present.
+  - Transactional SMS type ensures optimal delivery for OTP codes.
+  - Rate limiting prevents SMS spam while maintaining user experience.
 
 **Section sources**
 - [backend/Dockerfile:49-82](file://backend/Dockerfile#L49-L82)
 - [frontend/Dockerfile:59-63](file://frontend/Dockerfile#L59-L63)
 - [backend/src/app.module.ts:117-123](file://backend/src/app.module.ts#L117-L123)
+- [backend/src/auth/auth.service.ts:31-44](file://backend/src/auth/auth.service.ts#L31-L44)
 
 ## Troubleshooting Guide
 - Health Probes
@@ -494,21 +590,35 @@ App --> Features["Feature Modules (Auth, Users, etc.)"]
   - If SENTRY_DSN is unset, Sentry.init is a no-op; otherwise ensure beforeSend redaction is effective.
 - Secret Exposure
   - Run scripts/scan-secrets.js to detect high-confidence patterns; rotate credentials and remove from history if needed.
+- **AWS SNS Issues**
+  - Check AWS_REGION, AWS_ACCESS_KEY_ID, and AWS_SECRET_ACCESS_KEY environment variables.
+  - Verify SNS client initialization logs show "SNS client initialised successfully".
+  - For India deployments, ensure AWS_SNS_SENDER_ID is configured for DLT compliance.
+  - Check that SMS messages are being sent with SMSType set to Transactional.
 
 **Section sources**
 - [backend/src/health/health.controller.ts:52-106](file://backend/src/health/health.controller.ts#L52-L106)
 - [backend/src/main.ts:68-75](file://backend/src/main.ts#L68-L75)
 - [backend/src/sentry.ts:14-50](file://backend/src/sentry.ts#L14-L50)
 - [scripts/scan-secrets.js:97-132](file://scripts/scan-secrets.js#L97-L132)
+- [backend/src/auth/auth.service.ts:26-44](file://backend/src/auth/auth.service.ts#L26-L44)
 
 ## Conclusion
 The 4Ever application employs robust containerization, orchestrated local development, and production-grade cloud deployments on Fly.io and Railway. Its database leverages PostgreSQL with pgvector for embeddings, while monitoring and logging are implemented with Sentry and Pino. Security is enforced through environment hardening, strict CORS controls, and proactive secret scanning. Health checks and structured logging facilitate reliable operations, and the documented workflows support efficient rollouts and maintenance.
+
+**Updated** The application now includes AWS SNS SMS OTP functionality with regional configuration and sender ID support, enabling phone-based authentication with transactional SMS delivery optimized for India compliance.
 
 ## Appendices
 - Environment Variables Reference
   - Required: DATABASE_URL, JWT_SECRET
   - Optional: OPENROUTER_API_KEY, TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER, TAVILY_API_KEY, E2B_API_KEY, ADMIN_SECRET, CORS_ORIGINS, TTS_MODEL
+  - **AWS SNS**: AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SNS_SENDER_ID
 - Health Endpoints
   - /api/livez (liveness), /api/readyz (readiness), /api/health (legacy)
+- **AWS SNS Configuration**
+  - Default Region: ap-south-1 (India)
+  - Required Permissions: SNS Publish permissions for SMS delivery
+  - Sender ID: Required for DLT-registered senders in India
+  - Message Type: Transactional for OTP codes
 
 [No sources needed since this section summarizes previously cited information]

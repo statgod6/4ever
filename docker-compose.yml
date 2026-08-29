@@ -1,13 +1,15 @@
 services:
   postgres:
-    image: ankane/pgvector:latest
-    container_name: thinkingos-postgres
+    image: pgvector/pgvector:pg16
+    container_name: 4ever-postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-thinkingos}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-thinkingos_secret}
       POSTGRES_DB: ${POSTGRES_DB:-thinkingos}
     ports:
-      - "5432:5432"
+      # The backend runs on the laptop in local development, so expose the
+      # database only on loopback instead of the whole LAN.
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -15,6 +17,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
 
   backend:
     build:

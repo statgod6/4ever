@@ -3,19 +3,15 @@ module_path: configuration_system
 title: Environment-Driven Configuration with NestJS ConfigModule
 scope: []
 source_files:
-    - .env.example
-    - backend/src/main.ts
     - backend/src/app.module.ts
+    - backend/src/main.ts
     - backend/src/auth/auth.module.ts
     - backend/src/auth/jwt.strategy.ts
     - backend/src/health/health.controller.ts
-    - backend/prisma.config.ts
-    - backend/fly.toml
-    - backend/railway.json
-    - docker-compose.yml
+    - backend/.env
     - mobile/src/constants/config.ts
     - frontend/vite.config.ts
-    - backend/Dockerfile
-    - frontend/Dockerfile
+    - docker-compose.yml
+    - backend/fly.toml
 depends_on: []
 related_to: []

@@ -1,10 +1,28 @@
-// Force-load .env BEFORE anything else, with override:true so values in
-// backend/.env always win over polluted shell env vars (e.g. an empty
-// AWS_ACCESS_KEY_ID set in the parent PowerShell session).
+// Force-load .env BEFORE anything else.
+// The monorepo .env lives at the project root (4ever/.env), but NestJS
+// compiles to backend/dist/ so __dirname is 2-3 levels deep.
+// We load root .env first (without override), then backend/.env with
+// override:true so backend-specific values always win.
 import * as dotenv from 'dotenv';
 import { resolve } from 'path';
-dotenv.config({ path: resolve(__dirname, '..', '.env'), override: true });
+import { existsSync } from 'fs';
 
+const rootEnv = resolve(process.cwd(), '../.env');
+const backendEnv = resolve(process.cwd(), '.env');
+
+// 1. Load root .env first (non-override) — provides shared config
+if (existsSync(rootEnv)) {
+  dotenv.config({ path: rootEnv });
+  // eslint-disable-next-line no-console
+  console.log(`[dotenv] root: ${rootEnv}`);
+}
+// 2. Load backend/.env with override:true — backend-specific values win
+//    This fixes the case where root .env has empty placeholders.
+if (existsSync(backendEnv)) {
+  dotenv.config({ path: backendEnv, override: true });
+  // eslint-disable-next-line no-console
+  console.log(`[dotenv] backend (override): ${backendEnv}`);
+}
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe } from '@nestjs/common';

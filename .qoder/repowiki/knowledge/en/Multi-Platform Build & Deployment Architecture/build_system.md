@@ -1,32 +1,39 @@
-The 4Ever AI Life OS Platform employs a polyglot, container-centric build system designed for independent scaling and deployment of its backend, web frontend, and mobile clients. The architecture leverages Docker for server-side consistency, Expo Application Services (EAS) for mobile distribution, and platform-specific Infrastructure-as-Code (IaC) for cloud orchestration.
+The 4Ever AI Life OS Platform employs a poly-repository-style monorepo structure with distinct build pipelines for its Backend (NestJS), Frontend (React/Vite), and Mobile (Expo/React Native) applications. The build system is characterized by containerized production deployments for web services and cloud-native managed builds for mobile.
 
-### 1. Backend Build & Runtime (NestJS)
-- **Compilation**: Uses `nest build` to transpile TypeScript into optimized JavaScript. The build process is tightly coupled with Prisma ORM, requiring `prisma generate` to create type-safe database clients before compilation.
-- **Containerization**: Implements a hardened multi-stage Dockerfile using `node:20.17.0-alpine`. 
-  - **Stage 1 (deps)**: Installs all dependencies with cache mounting.
-  - **Stage 2 (build)**: Generates Prisma clients and compiles the application.
-  - **Stage 3 (runtime)**: A minimal production image that installs only production dependencies (`npm ci --omit=dev`), runs as a non-root user (`node`), and uses `dumb-init` for proper PID 1 signal handling (graceful shutdowns).
-- **Health Checks**: Integrated liveness probes (`/api/livez`) using Node's native `fetch` to avoid extra binary dependencies in the Alpine image.
+### 1. Backend Build & Deployment (NestJS)
+- **Compilation**: Uses `nest-cli` to compile TypeScript into JavaScript (`npm run build`).
+- **Containerization**: A hardened, multi-stage `Dockerfile` is used:
+  - **Stage 1 (deps)**: Installs all dependencies using `npm ci` with cache mounting.
+  - **Stage 2 (build)**: Generates the Prisma client and compiles the application.
+  - **Stage 3 (runtime)**: Uses `node:20.17.0-alpine` with `dumb-init` for proper signal handling (SIGTERM). It installs only production dependencies (`--omit=dev`) and runs as a non-root user (`node`).
+- **Database Migrations**: Integrated into the deployment lifecycle via `npx prisma migrate deploy` as a release command in both Fly.io and Railway configurations.
+- **Deployment Targets**:
+  - **Fly.io**: Configured via `fly.toml` with rolling deployments, health checks (`/api/livez`, `/api/readyz`), and secret management via `fly secrets`.
+  - **Railway**: Configured via `railway.json` with automatic restart policies and health check paths.
+  - **Docker Compose**: Used for local development and self-hosted environments, orchestrating PostgreSQL (with `pgvector`), Backend, and Frontend.
 
-### 2. Frontend Build & Serving (React/Vite)
-- **Compilation**: Utilizes Vite for fast development and optimized production builds (`tsc && vite build`).
-- **Containerization**: A two-stage Docker pipeline where the first stage builds the static assets, and the second stage serves them via `nginxinc/nginx-unprivileged`. This ensures the web server runs without root privileges and listens on port 8080.
-- **Reverse Proxy**: The Nginx configuration includes a reverse proxy for `/api` requests to the backend service, handling WebSocket upgrades for real-time features and setting security headers (HSTS, X-Frame-Options).
+### 2. Frontend Build & Deployment (React/Vite)
+- **Compilation**: Uses Vite for bundling (`npm run build`), producing static assets in `dist/`.
+- **Containerization**: A multi-stage `Dockerfile` serves the static bundle via `nginxinc/nginx-unprivileged:1.27-alpine`.
+  - **Nginx Configuration**: Custom `default.conf` handles SPA routing (`try_files $uri /index.html`) and proxies `/api` requests to the backend service.
+  - **Security**: Includes security headers like `X-Content-Type-Options` and `X-Frame-Options`.
+- **Deployment**: Typically deployed alongside the backend via `docker-compose.yml` or as a standalone static site behind a CDN/Ingress.
 
-### 3. Mobile Distribution (Expo/EAS)
-- **Build Pipeline**: Relies on Expo Application Services (EAS) for cross-platform builds. The `eas.json` configuration defines three distinct profiles:
-  - **Development**: On-device debug builds with the Expo dev menu.
+### 3. Mobile Build & Deployment (Expo/React Native)
+- **Build System**: Relies on **EAS Build** (Expo Application Services) configured via `eas.json`.
+- **Build Profiles**:
+  - **Development**: On-device debug builds with the Expo dev menu, distributed internally.
   - **Preview**: Staging/QA builds pointing to the staging API, distributed internally.
-  - **Production**: Store-ready artifacts (AAB for Android, IPA for iOS) with auto-incrementing build numbers and remote versioning.
-- **Environment Management**: API endpoints are injected at build time via `EXPO_PUBLIC_API_URL`, allowing different builds to target local, staging, or production backends.
+  - **Production**: Store-ready AAB (Android) and IPA (iOS) builds with auto-incrementing version numbers.
+- **Configuration**: `app.json` defines app metadata, permissions (Camera, Contacts, Microphone), and runtime versions. 
+- **Submission**: EAS Submit is configured for automated submission to Apple App Store Connect and Google Play Console, though credentials are currently placeholders.
 
-### 4. Orchestration & Deployment
-- **Local Development**: `docker-compose.yml` orchestrates the PostgreSQL (with `pgvector`), backend, and frontend services. It uses an override file for hot-reload bind mounts during development.
-- **Cloud Deployment**:
-  - **Fly.io**: The backend uses `fly.toml` for region-specific deployment (Singapore), automated machine scaling, and rolling updates. Database migrations are executed as a `release_command` (`npx prisma migrate deploy`) before new instances go live.
-  - **Railway**: A `railway.json` provides an alternative deployment path, defining Docker-based builds and health-check-driven restart policies.
-- **Secrets Management**: Secrets are strictly excluded from version control. Fly.io deployments use `fly secrets set`, while local development relies on `.env` files managed via `.env.example` templates.
+### 4. Dependency Management
+- **Strategy**: Each project (backend, frontend, mobile) maintains its own `package.json` and `package-lock.json`, indicating a "loose monorepo" approach rather than a unified workspace (e.g., npm workspaces or pnpm).
+- **Versioning**: Root `package.json` exists but appears minimal; actual dependency resolution happens within each sub-project.
 
-### 5. Testing & Quality Assurance
-- **Backend**: Jest is configured for unit testing with `ts-jest` and isolated modules for performance. End-to-end tests are supported via a separate Jest configuration.
-- **Load Testing**: A basic smoke test suite exists in `tests/loadtest/smoke.js` to validate endpoint responsiveness under load.
+### Key Developer Rules
+- **Secrets Management**: Never commit secrets. Use `fly secrets set` for production and `.env` files (gitignored) for local development.
+- **Database Changes**: Always run `npx prisma migrate dev` locally to generate migrations. In production, migrations are applied automatically during deployment via the release command.
+- **Mobile Builds**: Use `eas build --profile [development|preview|production]` to trigger cloud builds. Local builds are discouraged for production artifacts.
+- **Docker Hardening**: Backend images must use `dumb-init` and non-root users to ensure graceful shutdowns and security compliance.

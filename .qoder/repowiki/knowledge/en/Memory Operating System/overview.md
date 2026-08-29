@@ -1,0 +1,1 @@
+Manages the lifecycle of ten distinct memory types with strength/decay mechanics, context-aware retrieval, and automated behavioral pattern discovery.

@@ -1,1 +1,0 @@
-Manages user identity context, AI persona configurations with knowledge bases, and daily/weekly reflection generation.

@@ -1,0 +1,3 @@
+- Implements fire-and-forget reinforcement by calling `reinforce()` asynchronously after memory retrieval to update access counts and strength without blocking the response.
+- Applies type-specific decay rates in the background job, assigning slower half-lives to 'identity' and 'goal' memories compared to standard episodic or semantic data.
+- Enforces token budgeting in the Context Builder by sorting context blocks by priority and pruning lower-priority sections when the estimated token count exceeds the 4000-token limit.

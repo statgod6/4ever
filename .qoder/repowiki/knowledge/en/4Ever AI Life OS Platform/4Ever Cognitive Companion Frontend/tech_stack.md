@@ -1,1 +1,0 @@
-React 18 with Vite build tooling, Zustand for global state management, Axios for HTTP communication, and Socket.IO for real-time bidirectional messaging.

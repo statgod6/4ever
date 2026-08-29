@@ -1,0 +1,19 @@
+schema_version: 1
+module_path: configuration_system
+title: Environment-Driven Configuration with NestJS ConfigModule
+scope: []
+source_files:
+    - backend/src/app.module.ts
+    - backend/src/main.ts
+    - backend/src/auth/auth.module.ts
+    - backend/src/auth/jwt.strategy.ts
+    - backend/src/health/health.controller.ts
+    - backend/src/sentry.ts
+    - backend/src/messaging/messaging.gateway.ts
+    - backend/src/skills/skills.service.ts
+    - mobile/src/constants/config.ts
+    - frontend/vite.config.ts
+    - docker-compose.yml
+    - backend/.env
+depends_on: []
+related_to: []

@@ -18,6 +18,7 @@ interface ToolActivity {
 }
 // Split assistant content into regular text and persona analysis blocks
 function splitPersonaSections(content: string): Array<{ type: 'text' | 'persona'; personaName?: string; thoughtTitle?: string; body: string }> {
+  if (!content || typeof content !== 'string') return [{ type: 'text', body: '' }]
   const regex = /## (.+?)'s Analysis of "(.+?)"\n/g
   const parts: Array<{ type: 'text' | 'persona'; personaName?: string; thoughtTitle?: string; body: string }> = []
   let lastIndex = 0
@@ -190,19 +191,19 @@ export default function CoreChat() {
             setThinkingStatus(event.data.status || 'reasoning')
             break
           case 'thinking_delta':
-            thinkingText += event.data.chunk
+            thinkingText += (event.data.chunk || event.data.text || '')
             setCurrentThinking(thinkingText)
             break
           case 'tool_start':
             setToolActivities((prev) => [
               ...prev,
-              { tool: event.data.tool, input: event.data.input, done: false },
+              { tool: event.data.name || event.data.tool, input: event.data.args || event.data.input, done: false },
             ])
             break
           case 'tool_end':
             setToolActivities((prev) =>
               prev.map((t) =>
-                t.tool === event.data.tool && !t.done ? { ...t, done: true } : t,
+                (t.tool === (event.data.name || event.data.tool) && !t.done) ? { ...t, done: true } : t,
               ),
             )
             break
@@ -210,13 +211,13 @@ export default function CoreChat() {
             setThinkingStatus('')
             if (!streamingMsgAdded) {
               streamingMsgAdded = true
-              setMessages((prev) => [...prev, { role: 'assistant', content: event.data.chunk, thinking: thinkingText || undefined }])
+              setMessages((prev) => [...prev, { role: 'assistant', content: event.data.text || event.data.chunk || '', thinking: thinkingText || undefined }])
             } else {
               setMessages((prev) => {
                 const updated = [...prev]
                 const last = updated[updated.length - 1]
                 if (last?.role === 'assistant') {
-                  updated[updated.length - 1] = { ...last, content: last.content + event.data.chunk }
+                  updated[updated.length - 1] = { ...last, content: (last.content || '') + (event.data.text || event.data.chunk || '') }
                 }
                 return updated
               })

@@ -1,3 +1,0 @@
-- API modules are organized by domain entity (e.g., `auth.ts`, `memories.ts`) and export typed functions using a shared Axios client instance.
-- Global state is managed via Zustand stores with persistence middleware for critical user sessions and preferences.
-- UI components utilize Tailwind CSS for styling, with reusable primitives like `Toast` and `ConfirmModal` integrated at the app root.

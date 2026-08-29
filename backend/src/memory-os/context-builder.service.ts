@@ -7,6 +7,8 @@ import { timeAgo } from '../orchestration/utils/time.util';
 export interface ContextBlock {
   section: string;
   content: string;
+  /** Lower number = higher priority (0 = always keep). Used for token budgeting. */
+  priority?: number;
 }
 
 /**
@@ -56,20 +58,20 @@ export class ContextBuilderService {
       this.fetchUserProfile(userId),
     ]);
 
-    if (goals) blocks.push({ section: 'YOUR GOALS', content: goals });
-    if (identity) blocks.push({ section: 'WHO YOU ARE', content: identity });
-    if (userProfile) blocks.push({ section: 'USER PROFILE', content: userProfile });
+    if (goals) blocks.push({ section: 'YOUR GOALS', content: goals, priority: 0 });
+    if (identity) blocks.push({ section: 'WHO YOU ARE', content: identity, priority: 0 });
+    if (userProfile) blocks.push({ section: 'USER PROFILE', content: userProfile, priority: 1 });
 
     // ── CONTEXTUAL layer (based on message content / scope) ────────────
     const relevantMemories = await this.fetchRelevantMemories(userId, message);
-    if (relevantMemories) blocks.push({ section: 'WHAT YOU KNOW', content: relevantMemories });
+    if (relevantMemories) blocks.push({ section: 'WHAT YOU KNOW', content: relevantMemories, priority: 1 });
 
-    if (patterns) blocks.push({ section: 'BEHAVIORAL PATTERNS', content: patterns });
+    if (patterns) blocks.push({ section: 'BEHAVIORAL PATTERNS', content: patterns, priority: 3 });
 
     // ── SCOPE-SPECIFIC layers ──────────────────────────────────────────
     if (scope === 'relationship' || scope === 'general') {
       const relContext = await this.fetchRelationshipContext(userId);
-      if (relContext) blocks.push({ section: 'RELATIONSHIP CONTEXT', content: relContext });
+      if (relContext) blocks.push({ section: 'RELATIONSHIP CONTEXT', content: relContext, priority: 2 });
     }
 
     if (scope === 'planner') {
@@ -79,15 +81,15 @@ export class ContextBuilderService {
         this.fetchCompletionStats(userId),
         this.fetchCompletedActions(userId),
       ]);
-      if (completionStats) blocks.push({ section: 'TASK COMPLETION PATTERNS', content: completionStats });
-      if (pending) blocks.push({ section: 'PENDING ACTION ITEMS', content: pending });
-      if (completed) blocks.push({ section: 'RECENTLY COMPLETED ACTIONS', content: completed });
-      if (calendar) blocks.push({ section: 'TODAY\'S SCHEDULE & UPCOMING', content: calendar });
+      if (completionStats) blocks.push({ section: 'TASK COMPLETION PATTERNS', content: completionStats, priority: 4 });
+      if (pending) blocks.push({ section: 'PENDING ACTION ITEMS', content: pending, priority: 2 });
+      if (completed) blocks.push({ section: 'RECENTLY COMPLETED ACTIONS', content: completed, priority: 4 });
+      if (calendar) blocks.push({ section: 'TODAY\'S SCHEDULE & UPCOMING', content: calendar, priority: 3 });
     }
 
     if (scope === 'life_review') {
       const mood = await this.fetchMood(userId);
-      if (mood) blocks.push({ section: 'MOOD & ENERGY (LAST 7 DAYS)', content: mood });
+      if (mood) blocks.push({ section: 'MOOD & ENERGY (LAST 7 DAYS)', content: mood, priority: 3 });
     }
 
     if (scope === 'memory_recall') {
@@ -95,8 +97,8 @@ export class ContextBuilderService {
         this.fetchRecentThoughts(userId),
         this.fetchThreadSummaries(userId),
       ]);
-      if (thoughts) blocks.push({ section: 'RECENT THOUGHTS', content: thoughts });
-      if (threads) blocks.push({ section: 'ACTIVE THREAD SUMMARIES', content: threads });
+      if (thoughts) blocks.push({ section: 'RECENT THOUGHTS', content: thoughts, priority: 3 });
+      if (threads) blocks.push({ section: 'ACTIVE THREAD SUMMARIES', content: threads, priority: 4 });
     }
 
     if (scope === 'messaging' || scope === 'general') {
@@ -105,25 +107,26 @@ export class ContextBuilderService {
         this.fetchUnreadMessages(userId),
         this.fetchSharedNotes(userId),
       ]);
-      if (connections) blocks.push({ section: '4EVER CONNECTIONS', content: connections });
-      if (unread) blocks.push({ section: 'UNREAD MESSAGES', content: unread });
-      if (sharedNotes) blocks.push({ section: 'RECENT SHARED NOTES', content: sharedNotes });
+      if (connections) blocks.push({ section: '4EVER CONNECTIONS', content: connections, priority: 5 });
+      if (unread) blocks.push({ section: 'UNREAD MESSAGES', content: unread, priority: 4 });
+      if (sharedNotes) blocks.push({ section: 'RECENT SHARED NOTES', content: sharedNotes, priority: 5 });
     }
 
     if (scope === 'relationship') {
       const events = await this.fetchUpcomingEvents(userId);
-      if (events) blocks.push({ section: 'UPCOMING RELATIONSHIP EVENTS', content: events });
+      if (events) blocks.push({ section: 'UPCOMING RELATIONSHIP EVENTS', content: events, priority: 4 });
     }
 
     // ── ALWAYS: Session summaries for continuity ───────────────────────
     const sessions = await this.fetchSessionSummaries(userId);
-    if (sessions) blocks.push({ section: 'PREVIOUS SESSION CONTEXT', content: sessions });
+    if (sessions) blocks.push({ section: 'PREVIOUS SESSION CONTEXT', content: sessions, priority: 3 });
 
     // ── ALWAYS: Available personas ─────────────────────────────────────
     const personas = await this.fetchAvailablePersonas(userId);
-    if (personas) blocks.push({ section: 'AVAILABLE PERSONAS', content: personas });
+    if (personas) blocks.push({ section: 'AVAILABLE PERSONAS', content: personas, priority: 5 });
 
-    return blocks;
+    // ── TOKEN BUDGET: cap total context at ~4000 tokens ─────────────────
+    return this.applyTokenBudget(blocks, 4000);
   }
 
   /**
@@ -131,6 +134,45 @@ export class ContextBuilderService {
    */
   formatForPrompt(blocks: ContextBlock[]): string[] {
     return blocks.map(b => `--- ${b.section} ---\n${b.content}`);
+  }
+
+  /**
+   * Rough token estimate (~4 chars per token).
+   */
+  private estimateTokens(text: string): number {
+    return Math.ceil(text.length / 4);
+  }
+
+  /**
+   * Token budgeting — drop lowest-priority blocks first when total exceeds budget.
+   * Priority 0 = always keep (goals, identity). Priority 5 = drop first (personas, connections).
+   */
+  private applyTokenBudget(blocks: ContextBlock[], maxTokens: number): ContextBlock[] {
+    const total = blocks.reduce((sum, b) => sum + this.estimateTokens(b.content), 0);
+    if (total <= maxTokens) return blocks;
+
+    this.logger.warn(
+      `Context total ${total} tokens exceeds budget ${maxTokens} — pruning low-priority blocks`,
+    );
+
+    // Sort by priority descending (highest priority number = lowest importance = drop first)
+    const sorted = [...blocks].sort((a, b) => (b.priority ?? 5) - (a.priority ?? 5));
+    const kept: ContextBlock[] = [];
+    let remaining = maxTokens;
+
+    for (const block of sorted) {
+      const tokens = this.estimateTokens(block.content);
+      if (tokens <= remaining || (block.priority ?? 5) === 0) {
+        kept.push(block);
+        remaining -= tokens;
+      } else {
+        this.logger.debug(`Dropped context block "${block.section}" (${tokens} tokens, priority ${block.priority ?? 5})`);
+      }
+    }
+
+    // Restore original insertion order
+    const keptSet = new Set(kept);
+    return blocks.filter(b => keptSet.has(b));
   }
 
   // ── ALWAYS-INJECT fetchers ─────────────────────────────────────────────
@@ -223,7 +265,7 @@ export class ContextBuilderService {
   private async fetchRelevantMemories(userId: string, message: string): Promise<string | null> {
     try {
       const memories = await this.memoryManager.retrieve(userId, message, {
-        limit: 8,
+        limit: 5,
         // Exclude goals and identity — already in always-inject layer
         types: ['episodic', 'semantic', 'procedural', 'reflection', 'relationship', 'skill', 'episode', 'collective'],
       });
@@ -252,7 +294,7 @@ export class ContextBuilderService {
         where: { userId, isActive: true },
         include: { notes: { take: 3, orderBy: { createdAt: 'desc' } } },
         orderBy: { lastInteractionAt: 'desc' },
-        take: 10,
+        take: 3,
       });
       if (people.length === 0) return null;
 
@@ -276,7 +318,7 @@ export class ContextBuilderService {
       const actions = await this.prisma.actionItem.findMany({
         where: { userId, status: 'pending' },
         orderBy: { dueDate: 'asc' },
-        take: 10,
+        take: 5,
       });
       if (actions.length === 0) return null;
       return actions.map(a => {
@@ -298,8 +340,9 @@ export class ContextBuilderService {
 
       const plans = await this.prisma.dayPlan.findMany({
         where: { userId, date: { gte: today, lt: tomorrow } },
-        include: { tasks: { orderBy: { sortOrder: 'asc' } } },
+        include: { tasks: { orderBy: { sortOrder: 'asc' }, take: 5 } },
         orderBy: { date: 'asc' },
+        take: 3,
       });
       if (plans.length === 0) return null;
 
@@ -344,7 +387,7 @@ export class ContextBuilderService {
       const actions = await this.prisma.actionItem.findMany({
         where: { userId, status: 'done' },
         orderBy: { createdAt: 'desc' },
-        take: 5,
+        take: 3,
       });
       if (actions.length === 0) return null;
       return actions.map(a => `- ✓ ${a.content}`).join('\n');
@@ -359,7 +402,7 @@ export class ContextBuilderService {
       const checkins = await this.prisma.dailyCheckIn.findMany({
         where: { userId },
         orderBy: { date: 'desc' },
-        take: 7,
+        take: 4,
       });
       if (checkins.length === 0) return null;
       return checkins.map(c => {
@@ -382,7 +425,7 @@ export class ContextBuilderService {
       const thoughts = await this.prisma.thought.findMany({
         where: { userId },
         orderBy: { createdAt: 'desc' },
-        take: 5,
+        take: 3,
       });
       if (thoughts.length === 0) return null;
       return thoughts.map(t => {
@@ -399,7 +442,7 @@ export class ContextBuilderService {
     try {
       const summaries = await this.prisma.thoughtSummary.findMany({
         orderBy: { updatedAt: 'desc' },
-        take: 5,
+        take: 3,
         include: { thread: { select: { thought: { select: { userId: true, title: true } } } } },
       });
       // Filter to only this user's threads
@@ -445,7 +488,7 @@ export class ContextBuilderService {
       const messages = await this.prisma.directMessage.findMany({
         where: { receiverId: userId, isRead: false },
         orderBy: { createdAt: 'desc' },
-        take: 5,
+        take: 3,
         include: { sender: { select: { name: true } } },
       });
       if (messages.length === 0) return null;
@@ -484,7 +527,7 @@ export class ContextBuilderService {
         where: { connectionId: { in: connIds } },
         include: { author: { select: { name: true } } },
         orderBy: { createdAt: 'desc' },
-        take: 5,
+        take: 3,
       });
       if (notes.length === 0) return null;
       return notes.map(n =>
@@ -505,12 +548,12 @@ export class ContextBuilderService {
       const [rituals, lifeEvents] = await Promise.all([
         this.prisma.relationshipRitual.findMany({
           where: { userId, isActive: true },
-          take: 5,
+          take: 3,
         }),
         this.prisma.lifeEvent.findMany({
           where: { userId, eventDate: { gte: now, lte: thirtyDays } },
           orderBy: { eventDate: 'asc' },
-          take: 5,
+          take: 3,
         }),
       ]);
 

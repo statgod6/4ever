@@ -1,4 +1,0 @@
-- **Zustand**: Used for global state management in messaging flows (`frontend/src/store/messagingStore.ts`).
-- **Socket.IO Client**: Integrated for real-time bidirectional communication in `Messages.tsx`.
-- **Lucide React**: Primary icon library used across all three pages.
-- **React Router**: Used for navigation and URL parameter handling (e.g., `useSearchParams` in `Messages.tsx` to open specific chats).

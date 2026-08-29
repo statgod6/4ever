@@ -1,1 +1,0 @@
-Orchestrates a unified multi-client ecosystem (web, mobile) around a shared NestJS backend, enforcing consistent real-time mediation, semantic memory, and cross-platform state synchronization.

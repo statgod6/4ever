@@ -57,7 +57,7 @@ export default function PersonaChatScreen({ route }: Props) {
     let full = ''
     try {
       await orchestrationApi.personaDirectChatStream(personaId, text, (event: StreamEvent) => {
-        if (event.event === 'token') { full += event.data.chunk || ''; setStreamedContent(full); scrollToBottom() }
+        if (event.event === 'token') { full += event.data.text || event.data.chunk || ''; setStreamedContent(full); scrollToBottom() }
         else if (event.event === 'response') { full = event.data.text || event.data.content || full; setStreamedContent(full) }
         else if (event.event === 'done') {
           setMessages((prev) => [...prev, { id: `a-${Date.now()}`, role: 'assistant', content: full, createdAt: new Date().toISOString() }])

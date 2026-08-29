@@ -1,4 +1,0 @@
-- **Page-Level Composition**: The module consists of three distinct top-level React components (`Dashboard.tsx`, `CoreChat.tsx`, `Insights.tsx`) that serve as entry points for their respective views.
-- **API Abstraction Layer**: Each page delegates data fetching to specialized API clients (e.g., `orchestrationApi`, `insightsApi`, `ontologyApi`) located in `frontend/src/api/`, which handle REST and Server-Sent Events (SSE) communication.
-- **State Management Strategy**: Uses a hybrid approach combining local component state (`useState`) for UI-specific logic and global Zustand stores (`useThoughtStore`, `useAuthStore`) for shared application state.
-- **Streaming Interface Design**: `CoreChat.tsx` implements a custom SSE parser to handle real-time token streaming, tool execution events, and "thinking" blocks, updating the UI incrementally via event callbacks.

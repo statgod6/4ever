@@ -1,0 +1,15 @@
+schema_version: 1
+module_path: dependency_management
+title: npm-Based Monorepo Dependency Management with Lockfile Pinning
+scope: []
+source_files:
+    - backend/package.json
+    - frontend/package.json
+    - mobile/package.json
+    - backend/Dockerfile
+    - frontend/Dockerfile
+    - mobile/eas.json
+    - backend/railway.json
+    - backend/fly.toml
+depends_on: []
+related_to: []

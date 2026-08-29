@@ -1,1 +1,0 @@
-Provides a unified dashboard for user context, a streaming AI chat interface, and analytical insights into thinking patterns and relationship health.

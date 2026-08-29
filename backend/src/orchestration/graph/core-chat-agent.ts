@@ -33,7 +33,7 @@ export function createCoreChatAgent(
   const model = new ChatOpenRouter({
     model: defaultModel,
     temperature: 0.7,
-    maxTokens: 50000,
+    maxTokens: 8192,
     apiKey: openRouterApiKey,
   });
 

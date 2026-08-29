@@ -1,4 +1,0 @@
-- Agents are created per-request using factory functions (e.g., `createCoreChatAgent`) to bind user-specific context and tools, rather than being singleton services.
-- Domain modules consistently follow a Controller-Service-Module pattern, with DTOs isolated in a `dto` subdirectory for input validation.
-- PII redaction is enforced at the logging layer via `pino-http` configuration, stripping auth headers, OTPs, and tokens from all log outputs.
-- Rate limiting is implemented using named Throttler buckets (e.g., `auth_short`, `default`) to apply different limits based on endpoint sensitivity.

@@ -1,1 +1,0 @@
-Provides interfaces for AI-assisted research, long-term memory management, and multi-perspective thought analysis.

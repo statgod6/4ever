@@ -1,4 +1,0 @@
-- API modules export typed asynchronous functions that wrap `apiClient` methods, keeping network logic separate from UI components.
-- Zustand stores define both state slices and action methods within the `create` callback, often integrating side-effects like AsyncStorage writes directly into setters.
-- Screen components consume theme tokens via the `useTheme()` hook and generate dynamic `StyleSheet` objects through a `createStyles(colors, isDark)` factory to support runtime dark mode switching.
-- Navigation stacks are defined as functional components within `AppNavigator.tsx`, receiving theme colors via props or context to style headers and backgrounds consistently.

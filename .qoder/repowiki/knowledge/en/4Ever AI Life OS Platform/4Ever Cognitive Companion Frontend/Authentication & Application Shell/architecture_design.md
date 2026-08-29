@@ -1,3 +1,0 @@
-- Entry point `main.tsx` initializes the React DOM and wraps the application in `BrowserRouter`.
-- `App.tsx` acts as the shell, using `useAuthStore` to conditionally render the `Login` page or the main `Layout` with protected routes.
-- `Login.tsx` implements a multi-step OTP authentication flow (Phone -> OTP -> Name) interacting with `authApi` and managing temporary local storage for new user onboarding.

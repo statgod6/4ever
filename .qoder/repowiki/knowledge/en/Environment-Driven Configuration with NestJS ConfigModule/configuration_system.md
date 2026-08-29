@@ -1,97 +1,43 @@
-## Overview
+The 4Ever AI Life OS Platform employs an environment-driven configuration strategy, primarily leveraging the **NestJS `ConfigModule`** for the backend and build-time environment variable injection for the frontend and mobile clients. This approach ensures that sensitive credentials (API keys, database URLs, secrets) are decoupled from the codebase and managed via the deployment environment.
 
-The 4Ever AI Life OS Platform uses an **environment-variable-driven configuration system** built on `@nestjs/config` (NestJS ConfigModule) for the backend, with build-time environment injection for frontend and mobile clients. There is no centralized config file format (YAML/JSON/TOML); all runtime configuration flows through `.env` files and platform-specific secret management.
+### Backend Configuration (NestJS)
 
----
+*   **Core Mechanism**: The backend uses `@nestjs/config`'s `ConfigModule.forRoot({ isGlobal: true })` in `app.module.ts`. This makes the `ConfigService` available across all modules without needing to re-import the module.
+*   **Environment Loading**: 
+    *   In `main.ts`, `dotenv` is explicitly imported and configured with `override: true` at the very top of the file. This ensures that values in `backend/.env` take precedence over any shell environment variables, preventing accidental pollution from the host system during development.
+    *   In production (Docker/Fly.io), environment variables are injected directly into the container runtime, bypassing the `.env` file.
+*   **Validation & Fail-Closed Strategy**: 
+    *   Critical secrets like `JWT_SECRET` are validated at boot time in `auth.module.ts` and `jwt.strategy.ts`. If the secret is missing or too short (<16 chars), the application throws an error and refuses to start. This prevents the app from running with insecure defaults.
+    *   The `HealthController` (`/api/readyz`) performs a readiness check that verifies the presence of required environment variables (`DATABASE_URL`, `JWT_SECRET`, `OPENROUTER_API_KEY`) before marking the service as ready to accept traffic.
+*   **Dynamic Configuration**: 
+    *   **CORS**: Origins are parsed from `CORS_ORIGINS` (comma-separated string) in `main.ts`. In production, if `CORS_ORIGINS` is not set, the app crashes on startup to prevent wildcard exposure.
+    *   **Logging**: Log levels and transport (pretty-print vs. JSON) are determined by `NODE_ENV` and `LOG_LEVEL` in `app.module.ts` via `nestjs-pino`.
+    *   **Rate Limiting**: Throttler TTLs and limits are hardcoded in `app.module.ts` but could be externalized; currently, they use static defaults for different buckets (`default`, `auth_short`, `auth_long`).
 
-## Core Approach
+### Frontend Configuration (Vite + React)
 
-### Backend: NestJS ConfigModule + dotenv
+*   **Proxy-Based Dev Config**: The `vite.config.ts` uses a dev server proxy to forward `/api` requests to `http://localhost:3001`. This avoids CORS issues during local development and means the frontend doesn't need an explicit API URL env var in dev.
+*   **Production Build**: The frontend is built as a static SPA. API endpoints are relative (`/api`), relying on the web server (Nginx in Docker) to proxy or serve them from the same origin. No explicit `VITE_` env vars are currently used for API routing in the provided config, suggesting a same-origin deployment pattern.
 
-- **Framework**: `@nestjs/config` v3.x with `isGlobal: true`, making `ConfigService` injectable across all modules without per-module imports.
-- **Loading order**: `dotenv` is explicitly loaded in `backend/src/main.ts` **before** any NestJS bootstrap, with `override: true` to ensure `backend/.env` values always win over polluted shell environment variables.
-- **No default secrets**: Critical values like `JWT_SECRET`, `DATABASE_URL`, and `OPENROUTER_API_KEY` are validated at boot time; missing or weak values throw errors and prevent startup (fail-closed posture).
+### Mobile Configuration (Expo + React Native)
 
-### Frontend: Vite Build-Time Injection
+*   **Build-Time Injection**: The mobile app uses `EXPO_PUBLIC_API_URL` for configuration. Expo only exposes env vars prefixed with `EXPO_PUBLIC_` to the client bundle.
+*   **Resolution Logic** (`mobile/src/constants/config.ts`):
+    1.  **Env Var**: If `EXPO_PUBLIC_API_URL` is set (e.g., in `.env` or EAS build env), it is used. This is the standard for production/staging builds.
+    2.  **Dev Auto-Detect**: If unset and in `__DEV__`, it auto-detects the host IP based on the platform (Android emulator uses `10.0.2.2`, iOS simulator uses `localhost`, Expo Go uses a hardcoded `DEV_MACHINE_IP`).
+    3.  **Fail-Safe**: In production builds, if `EXPO_PUBLIC_API_URL` is missing, the app throws a fatal error at runtime to prevent connecting to a wrong or default host.
+*   **Derived Endpoints**: `BASE_URL` and `WS_URL` (for WebSockets) are derived programmatically from `API_URL`, ensuring consistency.
 
-- No runtime config loading. The frontend proxies `/api` requests to `http://localhost:3001` via `vite.config.ts` during development.
-- Production builds rely on nginx reverse-proxy configuration in the Dockerfile (`proxy_pass http://backend:3001/api`).
+### Infrastructure & Secrets Management
 
-### Mobile: Expo Public Env Vars
+*   **Docker Compose**: Uses variable substitution (`${VAR:-default}`) from the host environment. Critical secrets like `JWT_SECRET` are marked as required (`${JWT_SECRET:?error}`) to fail fast if missing.
+*   **Fly.io**: Secrets are managed via `fly secrets set` and injected into the runtime environment. The `fly.toml` file contains only non-sensitive defaults (e.g., `NODE_ENV=production`).
+*   **Prisma**: The `DATABASE_URL` is passed directly from the environment to the Prisma Client via `process.env`, adhering to Prisma's standard convention.
 
-- Uses `EXPO_PUBLIC_API_URL` (Expo's convention for client-exposed env vars) resolved at **build time** into the JS bundle.
-- Dev auto-detection logic in `mobile/src/constants/config.ts` resolves the API host based on runtime context (Expo Go on physical device → LAN IP, Android emulator → `10.0.2.2`, iOS simulator → `localhost`).
-- Production builds **fail loudly** if `EXPO_PUBLIC_API_URL` is unset — no hardcoded fallbacks.
+### Developer Conventions
 
----
-
-## Key Files
-
-| File | Purpose |
-|------|---------|
-| `.env.example` | Root-level template documenting all required and optional env vars with generation instructions |
-| `backend/src/main.ts` | Explicit dotenv loading with `override: true`; CORS validation; port resolution |
-| `backend/src/app.module.ts` | `ConfigModule.forRoot({ isGlobal: true })`; Pino logger config driven by `LOG_LEVEL` and `NODE_ENV` |
-| `backend/src/auth/auth.module.ts` | JWT module async factory using `ConfigService`; validates `JWT_SECRET` length >= 16 chars |
-| `backend/src/auth/jwt.strategy.ts` | Re-validates `JWT_SECRET` in strategy constructor (defensive double-check) |
-| `backend/src/health/health.controller.ts` | Readiness probe checks presence of required env vars (`DATABASE_URL`, `JWT_SECRET`, `OPENROUTER_API_KEY`) |
-| `backend/prisma.config.ts` | Prisma CLI config reading `DATABASE_URL` from `process.env` via dotenv |
-| `backend/fly.toml` | Fly.io deployment config; secrets injected via `fly secrets set` (never committed) |
-| `backend/railway.json` | Railway deployment config with healthcheck path and start command |
-| `docker-compose.yml` | Local dev orchestration; env var interpolation with defaults and required-var enforcement (`${JWT_SECRET:?...}`) |
-| `mobile/src/constants/config.ts` | API URL resolution with precedence chain: env var > dev auto-detect > error |
-| `frontend/vite.config.ts` | Dev proxy config pointing to backend |
-
----
-
-## Architecture & Conventions
-
-### Environment Variable Categories
-
-The `.env.example` file organizes vars into clear sections:
-
-1. **Database**: `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `DATABASE_URL`
-2. **Auth/Security**: `JWT_SECRET` (min 64 hex chars), `JWT_EXPIRATION`, `OTP_PEPPER` (min 32 chars)
-3. **AI Providers**: `OPENROUTER_API_KEY`, `OPENROUTER_DEFAULT_MODEL`, `TTS_MODEL`, `TAVILY_API_KEY`, `E2B_API_KEY`
-4. **Infrastructure**: `PORT`, `NODE_ENV`, `CORS_ORIGINS`, `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_S3_BUCKET`
-5. **Feature Flags**: `ONTOLOGY_ENABLED`, `SKILLS_ENABLED`, `SKILLS_SHADOW_MODE`, `SKILLS_MAX_SELECTED`
-6. **Admin/Ops**: `ADMIN_SECRET`, `SENTRY_DSN`, `SENTRY_ENVIRONMENT`, `SENTRY_RELEASE`
-7. **SMS**: `AWS_SNS_SENDER_ID` (with India DLT registration notes)
-
-### Validation Strategy
-
-- **Boot-time validation**: `auth.module.ts` throws if `JWT_SECRET` is missing or < 16 chars. `jwt.strategy.ts` re-checks this.
-- **Readiness probe validation**: `health.controller.ts` `/readyz` endpoint checks presence of `DATABASE_URL`, `JWT_SECRET`, `OPENROUTER_API_KEY` and returns 503 if any are missing.
-- **Production CORS enforcement**: `main.ts` throws `CORS_ORIGINS must be set in production` if `NODE_ENV === 'production'` and `CORS_ORIGINS` is unset.
-- **Docker Compose enforcement**: `${JWT_SECRET:?JWT_SECRET is required and must not be empty}` syntax causes compose to fail if the var is empty.
-
-### Secret Management by Platform
-
-| Platform | Method |
-|----------|--------|
-| Local dev | `.env` file (gitignored) copied from `.env.example` |
-| Docker Compose | Host env vars interpolated into container; `.env` file support |
-| Fly.io | `fly secrets set KEY=VALUE` (encrypted at rest, injected at runtime) |
-| Railway | Environment variables set in Railway dashboard or via `railway up` |
-| EAS (Mobile) | `EXPO_PUBLIC_API_URL` set via `eas.json` env or `.env` at build time |
-
-### Logging Configuration
-
-- Pino logger level controlled by `LOG_LEVEL` env var, defaulting to `info` in production and `debug` in development.
-- Transport: `pino-pretty` in dev (colorized, single-line), raw JSON in production.
-- PII redaction configured in `app.module.ts` via Pino's `redact.paths` — strips auth headers, OTP codes, phone numbers, tokens from all log lines.
-
----
-
-## Rules Developers Should Follow
-
-1. **Never commit `.env`**: Only `.env.example` (placeholders) is tracked. Use `scripts/scan-secrets.js` to detect accidental secret commits.
-2. **Generate strong secrets**: Use the provided `node -e` commands in `.env.example` comments to generate `JWT_SECRET` (64 hex chars) and `OTP_PEPPER` (64 hex chars).
-3. **Add new env vars to `.env.example`**: Document the purpose, generation method, and whether it's required or optional.
-4. **Validate critical vars at boot**: If a new module requires a secret, add validation in its module's `useFactory` or service constructor — fail closed, never default to a placeholder.
-5. **Use `ConfigService.get<T>()` for type safety**: Inject `ConfigService` and use typed getters rather than raw `process.env` access in services.
-6. **Frontend/mobile env vars must use `EXPO_PUBLIC_` prefix**: Expo only exposes vars with this prefix to client code. Backend-only vars stay in backend `.env`.
-7. **Platform-specific secrets go through platform secret stores**: Never hardcode API keys in `fly.toml`, `railway.json`, or `eas.json`. Use `fly secrets set`, Railway dashboard, or EAS secrets.
-8. **CORS origins must be explicit in production**: Never use wildcards. Set `CORS_ORIGINS` to comma-separated list of owned domains.
-9. **Feature flags default to safe values**: `SKILLS_ENABLED=false`, `SKILLS_SHADOW_MODE=true` — new features should ship disabled or in shadow mode.
-10. **Health probes reflect config state**: If adding a new required integration, add its presence check to `/readyz` in `health.controller.ts`.
+1.  **Never Hardcode Secrets**: All API keys, DB URLs, and secrets must be in `.env` (gitignored) or the deployment environment.
+2.  **Prefix Mobile Env Vars**: Use `EXPO_PUBLIC_` prefix for any env var needed in the mobile client.
+3.  **Validate Early**: Critical config should be validated at module initialization or bootstrap (e.g., `JwtStrategy`) to fail fast.
+4.  **Use `ConfigService`**: In NestJS services, inject `ConfigService` to read env vars rather than accessing `process.env` directly. This improves testability and aligns with NestJS patterns.
+5.  **CORS Safety**: Always define `CORS_ORIGINS` explicitly in production. The app will crash if this is missing in prod mode.

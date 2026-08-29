@@ -1,2 +1,0 @@
-- Async form handlers use a try/catch/finally block to manage loading states and display API error messages.
-- Input fields use relative positioning to place Lucide icons absolutely within the input container for visual enhancement.

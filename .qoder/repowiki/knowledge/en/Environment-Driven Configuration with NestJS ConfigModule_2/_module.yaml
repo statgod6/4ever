@@ -1,0 +1,16 @@
+schema_version: 1
+module_path: configuration_system
+title: Environment-Driven Configuration with NestJS ConfigModule
+scope: []
+source_files:
+    - backend/src/app.module.ts
+    - backend/src/main.ts
+    - backend/.env
+    - mobile/src/constants/config.ts
+    - frontend/vite.config.ts
+    - docker-compose.yml
+    - backend/fly.toml
+    - backend/railway.json
+    - backend/src/sentry.ts
+depends_on: []
+related_to: []

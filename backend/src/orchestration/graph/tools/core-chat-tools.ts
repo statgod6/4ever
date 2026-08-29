@@ -291,7 +291,7 @@ export function createCoreChatTools(
                 { role: 'system', content: systemContent },
                 { role: 'user', content: userMessage },
               ],
-              max_tokens: 50000,
+              max_tokens: 8192,
               temperature: 0.7,
             }),
           });

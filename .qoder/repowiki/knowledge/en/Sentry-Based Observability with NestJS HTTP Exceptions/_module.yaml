@@ -1,0 +1,15 @@
+schema_version: 1
+module_path: error_handling
+title: Sentry-Based Observability with NestJS HTTP Exceptions
+scope: []
+source_files:
+    - backend/src/common/sentry-exception.filter.ts
+    - backend/src/sentry.ts
+    - backend/src/main.ts
+    - backend/src/auth/auth.service.ts
+    - backend/src/messaging/messaging.gateway.ts
+    - frontend/src/components/ErrorBoundary.tsx
+    - frontend/src/api/client.ts
+    - mobile/src/api/client.ts
+depends_on: []
+related_to: []

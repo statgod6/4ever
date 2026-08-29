@@ -3,15 +3,13 @@ module_path: dependency_management
 title: npm-Based Monorepo Dependency Management with Lockfile Pinning
 scope: []
 source_files:
+    - package.json
+    - package-lock.json
     - backend/package.json
     - backend/package-lock.json
-    - backend/Dockerfile
     - frontend/package.json
     - frontend/package-lock.json
-    - frontend/Dockerfile
     - mobile/package.json
     - mobile/package-lock.json
-    - mobile/eas.json
-    - package.json
 depends_on: []
 related_to: []

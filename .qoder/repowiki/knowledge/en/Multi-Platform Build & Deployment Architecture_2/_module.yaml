@@ -1,0 +1,17 @@
+schema_version: 1
+module_path: build_system
+title: Multi-Platform Build & Deployment Architecture
+scope: []
+source_files:
+    - backend/Dockerfile
+    - frontend/Dockerfile
+    - docker-compose.yml
+    - docker-compose.override.yml
+    - backend/fly.toml
+    - backend/railway.json
+    - mobile/eas.json
+    - backend/package.json
+    - frontend/package.json
+    - mobile/package.json
+depends_on: []
+related_to: []

@@ -1,1 +1,0 @@
-A NestJS API orchestrating AI-driven personal growth, relationship mediation, and knowledge work via LangGraph agents, backed by PostgreSQL with vector search.

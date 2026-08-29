@@ -1,1 +1,0 @@
-Manages daily scheduling, action item tracking from AI personas, and the creation of new thoughts with multi-persona analysis.

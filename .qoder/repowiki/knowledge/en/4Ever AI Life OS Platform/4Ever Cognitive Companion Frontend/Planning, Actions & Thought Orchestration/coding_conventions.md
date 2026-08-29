@@ -1,3 +1,0 @@
-- API clients are organized by domain (e.g., `plannerApi`, `actionsApi`) and export typed interfaces alongside async methods.
-- Page components use local state for UI-specific logic (loading, editing) and delegate data persistence to dedicated API modules.
-- Toast notifications are used consistently for user feedback on async operations (success/error/warning).

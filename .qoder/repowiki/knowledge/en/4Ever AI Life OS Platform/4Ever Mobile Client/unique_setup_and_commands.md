@@ -1,3 +1,0 @@
-- **Development**: Requires Expo CLI. Start with `npm start` or `npx expo start`.
-- **Platform Targets**: Supports iOS, Android, and Web via `expo start --ios`, `--android`, or `--web`.
-- **Builds**: Managed via EAS (Expo Application Services) as indicated by `eas.json`.

@@ -1,1 +1,0 @@
-Manages user authentication via OTP and controls the application's root layout and routing based on login status.

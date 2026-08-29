@@ -1,90 +1,177 @@
+# Logging System
+
 ## Overview
 
-The backend uses **nestjs-pino** (built on [pino](https://getpino.io/)) as its structured JSON logging framework, paired with **Sentry** (`@sentry/node`) for error tracking and exception capture. This dual-layer approach separates routine operational logging from actionable error monitoring.
+The 4Ever AI Life OS Platform uses a dual-layer observability strategy:
 
-## Core Components
+1. **Structured application logging** via [Pino](https://getpino.io/) (through `nestjs-pino`)
+2. **Error tracking and exception monitoring** via [Sentry](https://sentry.io/)
 
-### Pino HTTP Logger (nestjs-pino)
+This combination provides JSON-structured log output for aggregation/analysis and centralized error reporting for production incident management.
 
-Configured globally in `app.module.ts` via `LoggerModule.forRoot()`. Key characteristics:
+---
 
-- **Log levels**: Environment-driven — `debug` in development, `info` in production (via `LOG_LEVEL` env var or `NODE_ENV` fallback).
-- **Output format**: Pretty-printed with colors in dev (using `pino-pretty`), raw JSON lines in production for log aggregator ingestion.
-- **Correlation IDs**: Every HTTP request gets a unique ID from `x-request-id` / `x-correlation-id` headers, or a generated UUID. This flows through child loggers for distributed tracing.
-- **Auto-logging**: HTTP request/response logging is automatic but skips health probe endpoints (`/api/livez`, `/api/readyz`, `/api/health`) to reduce noise.
-- **Custom log level routing**: Responses with status >= 500 are logged at `error`, 400-499 at `warn`, everything else at `info`.
+## Architecture
 
-### Request/Response Serializers
+### Pino (Application Logging)
 
-Lean serializers prevent log bloat:
-- **Request**: Only logs `id`, `method`, URL path (query strings stripped to avoid token leakage), `remoteAddress`, and `user-agent`.
-- **Response**: Only logs `statusCode`.
+Pino is configured globally in `backend/src/app.module.ts` via the `LoggerModule.forRoot()` call. Key characteristics:
 
-### PII Redaction (Mandatory)
+- **Integration**: Uses `nestjs-pino` to replace NestJS's default console logger
+- **Bootstrap wiring**: In `main.ts`, `app.useLogger(app.get(PinoLogger))` swaps Nest's internal logger so all framework-level logs (guards, pipes, controllers) flow through Pino
+- **Buffering**: `bufferLogs: true` during bootstrap ensures early startup logs are captured once Pino is initialized
 
-A comprehensive `redact` configuration strips sensitive data from every log line before it is written. Redacted fields include:
-- Auth headers: `authorization`, `cookie`, `x-api-key`, `x-admin-secret`
-- Set-cookie response headers
-- Body fields: `phone`, `phoneNumber`, `otp`, `otpCode`, `password`
-- Generic patterns: any nested field named `password`, `otp`, `token`, `accessToken`, `refreshToken`, `jwt`, `apiKey`, `secret`
-- Censor value: `[REDACTED]`
+### Sentry (Error Tracking)
 
-This is explicitly documented as a GDPR compliance requirement — missing a single redact path constitutes a PII leak.
+Sentry is initialized in `backend/src/sentry.ts` via `initSentry()`, called at the very top of `main.ts` before any other imports. This ensures early crashes during module evaluation are captured.
 
-### NestJS Logger Integration
+- **Zero-config off switch**: When `SENTRY_DSN` is unset (local dev, CI), `initSentry()` returns immediately — no network calls, no hooks, no CPU cost
+- **Global exception filter**: `SentryExceptionFilter` (registered in `main.ts`) catches unhandled exceptions and forwards only 5xx errors to Sentry, preserving Nest's default response contract
 
-In `main.ts`, the default Nest logger is replaced:
-```typescript
-app.useLogger(app.get(PinoLogger));
-```
-This ensures all logs — including those from framework internals, guards, pipes, and service classes using `new Logger()` — flow through the Pino pipeline with redaction applied.
-
-Services use the standard NestJS `Logger` class:
-```typescript
-private readonly logger = new Logger(OrchestrationService.name);
-this.logger.log('message');
-this.logger.warn('message');
-this.logger.error('message', stackTrace);
-```
-
-### Sentry Error Tracking
-
-Initialized in `main.ts` before any other code runs via `initSentry()`. Key behaviors:
-
-- **Zero-config off switch**: When `SENTRY_DSN` is unset (local dev, CI), `initSentry()` returns immediately — no network calls, no hooks, no CPU cost.
-- **Sampling**: 100% trace sampling in non-prod, 20% in production.
-- **PII filtering**: The `beforeSend` hook strips phone numbers, OTP codes, passwords, tokens, authorization headers, and cookies from events before they reach Sentry.
-- **Global exception filter**: `SentryExceptionFilter` (registered globally) captures only 5xx errors and unknown exceptions. 4xx errors (validation failures, bad requests) are intentionally excluded to avoid drowning real signals in noise.
-- **User context**: When available, `req.user.userId` is attached to Sentry events for user-level error correlation.
-- **Bootstrap crash capture**: Fatal bootstrap errors are sent to Sentry before process exit.
-
-## Log Level Strategy
-
-| Level | Trigger |
-|-------|---------|
-| `error` | HTTP 5xx responses, caught exceptions with stack traces, fatal bootstrap errors |
-| `warn` | HTTP 4xx responses, missing API keys, ontology compose failures, memory retrieval failures |
-| `info` | Successful HTTP requests, service lifecycle events (module init, graph compilation), bootstrap completion |
-| `debug` | Development-only verbose output |
-
-## Developer Conventions
-
-1. **Use NestJS `Logger`**, not `console.log`: All services should instantiate `new Logger(ServiceName)` and call `.log()`, `.warn()`, `.error()`. This ensures logs flow through Pino's redaction pipeline.
-
-2. **Never log PII directly**: Even though Pino has redaction rules, do not rely on them as a safety net. Avoid logging phone numbers, OTP codes, tokens, or passwords in message text.
-
-3. **Use `console.log` only for dev-only OTP debugging**: The auth service uses `console.log` for OTP codes in non-production environments. This bypasses Pino but is acceptable because it is gated by `NODE_ENV !== 'production'`.
-
-4. **Error logging includes stack traces**: When calling `logger.error()`, pass the error's stack trace as the second argument for proper Sentry integration.
-
-5. **Health probes are silent**: Do not add custom logging to `/api/livez`, `/api/readyz`, or `/api/health` endpoints — these are auto-ignored by Pino to prevent log spam from Kubernetes probes.
-
-6. **Sentry is opt-in**: Code can safely call `Sentry.captureException()` without checking if Sentry is configured — it is a no-op when DSN is unset.
+---
 
 ## Key Files
 
-- `backend/src/app.module.ts` — Pino configuration, redaction rules, serializers
-- `backend/src/main.ts` — Logger wiring, Sentry initialization, bootstrap logging
-- `backend/src/sentry.ts` — Sentry setup, PII filtering, sampling config
-- `backend/src/common/sentry-exception.filter.ts` — Global error filter routing 5xx to Sentry
-- `backend/package.json` — Dependencies: `nestjs-pino`, `pino`, `pino-http`, `pino-pretty`, `@sentry/node`
+| File | Purpose |
+|------|---------|
+| `backend/src/app.module.ts` | Pino `LoggerModule.forRoot()` configuration — log levels, redaction rules, serializers, auto-logging filters |
+| `backend/src/main.ts` | Bootstrap: initializes Sentry, wires Pino as app logger, registers global exception filter |
+| `backend/src/sentry.ts` | Sentry initialization with PII redaction (`beforeSend` hook strips auth headers, OTP codes, phone numbers, tokens) |
+| `backend/src/common/sentry-exception.filter.ts` | Global exception filter — sends 5xx errors to Sentry, logs them locally, preserves 4xx client-error responses |
+| `backend/package.json` | Declares dependencies: `pino`, `pino-http`, `nestjs-pino`, `@sentry/node`, `pino-pretty` (dev) |
+
+---
+
+## Configuration Details
+
+### Log Levels
+
+- **Production**: `info` (configurable via `LOG_LEVEL` env var)
+- **Development**: `debug`
+- **Custom level logic** (HTTP requests):
+  - `error` for 5xx responses or thrown errors
+  - `warn` for 4xx responses
+  - `info` for successful requests
+
+### Output Format
+
+- **Production**: Raw JSON lines (no transport configured) — suitable for log aggregators (e.g., CloudWatch, Datadog, ELK)
+- **Development**: Pretty-printed via `pino-pretty` with colorized output, timestamp format `HH:MM:ss.l`, single-line mode
+
+### Request Correlation
+
+Every HTTP request gets a correlation ID:
+- Honors incoming `x-request-id` or `x-correlation-id` headers for distributed tracing
+- Falls back to generated UUID via `randomUUID()`
+- Flows through child loggers for end-to-end traceability
+
+### Auto-Logging Filters
+
+Health probe endpoints are excluded from automatic HTTP request logging to reduce noise:
+- `/api/livez`
+- `/api/readyz`
+- `/api/health`
+
+---
+
+## PII Redaction (Mandatory)
+
+Both Pino and Sentry enforce mandatory PII redaction. Missing a redaction path = GDPR violation risk.
+
+### Pino Redaction Paths
+
+Configured in `app.module.ts` via `redact.paths`:
+
+```
+req.headers.authorization
+req.headers.cookie
+req.headers["x-api-key"]
+req.headers["x-admin-secret"]
+res.headers["set-cookie"]
+*.password, *.otp, *.otpCode, *.phone, *.phoneNumber
+*.token, *.accessToken, *.refreshToken, *.jwt, *.apiKey, *.secret
+req.body.phone, req.body.phoneNumber, req.body.otp, req.body.otpCode, req.body.password
+```
+
+All redacted values are replaced with `[REDACTED]`.
+
+### Sentry Redaction
+
+The `beforeSend` hook in `sentry.ts` strips:
+- Request body fields: `phone`, `phoneNumber`, `otp`, `otpCode`, `password`, `token`, `identityToken`
+- Headers: `authorization`, `cookie`, `x-api-key`, `x-admin-secret`
+
+---
+
+## HTTP Request Serializers
+
+Lean serializers prevent full response bodies from appearing in logs:
+
+```typescript
+req: { id, method, url (query string stripped), remoteAddress, userAgent }
+res: { statusCode }
+```
+
+Query strings are dropped from URLs to avoid leaking tokens passed as query parameters.
+
+---
+
+## Developer Conventions
+
+### Using the Logger in Services
+
+Inject NestJS's standard `Logger` class — it automatically routes through Pino:
+
+```typescript
+import { Injectable, Logger } from '@nestjs/common';
+
+@Injectable()
+export class MyService {
+  private readonly logger = new Logger(MyService.name);
+
+  someMethod() {
+    this.logger.log('Operation completed');
+    this.logger.warn('Something unexpected happened');
+    this.logger.error('Failure occurred', errorStack);
+  }
+}
+```
+
+Available methods: `log()`, `debug()`, `warn()`, `error()`, `verbose()`, `fatal()`.
+
+### Error Handling Pattern
+
+1. **4xx errors** (validation, bad input): Throw `HttpException` subclasses — these are NOT sent to Sentry (expected client errors)
+2. **5xx errors** (server bugs, external failures): Let them propagate — `SentryExceptionFilter` captures them and sends to Sentry
+3. **Non-critical failures**: Use `try/catch` with `this.logger.warn()` or `this.logger.error()` for graceful degradation (see `context-builder.service.ts` pattern)
+
+### What NOT to Do
+
+- **Never** log raw OTP codes, phone numbers, JWT tokens, passwords, or API keys — Pino redaction covers common paths but custom log statements bypass it
+- **Never** use `console.log()` / `console.error()` for application logging — these bypass Pino's structured output, correlation IDs, and redaction
+- **Never** include full request/response bodies in manual log statements — serializers already capture essential metadata
+- **Do not** call `Sentry.captureException()` directly in service code — let the global filter handle it unless you have a specific reason
+
+### Exception: OTP Debug Logging
+
+`auth.service.ts` contains a deliberate exception for non-production environments:
+
+```typescript
+if (process.env.NODE_ENV !== 'production') {
+  console.log(`[OTP] ${normalized}: ${code}`);
+}
+```
+
+This is acceptable because it is gated behind `NODE_ENV !== 'production'` and serves local development debugging. Never replicate this pattern for other sensitive data.
+
+---
+
+## Frontend/Mobile Clients
+
+The React web frontend (`frontend/`) and React Native mobile app (`mobile/`) do not have dedicated logging frameworks. They rely on:
+
+- Browser/dev console output via `console.*` (development only)
+- Backend API error responses for user-facing feedback
+- Sentry backend tracking for server-side issues
+
+No client-side error tracking SDK (e.g., `@sentry/react`, `@sentry/react-native`) is currently integrated.

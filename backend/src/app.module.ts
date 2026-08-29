@@ -5,6 +5,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { LoggerModule } from 'nestjs-pino';
 import { randomUUID } from 'crypto';
+import * as path from 'path';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { ThoughtsModule } from './thoughts/thoughts.module';
@@ -35,6 +36,13 @@ import { MemoryOsModule } from './memory-os/memory-os.module';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      envFilePath: [
+        path.resolve(process.cwd(), '../.env'),   // monorepo root (cwd = backend/)
+        path.resolve(process.cwd(), '.env'),       // cwd if already root
+        path.resolve(__dirname, '../../.env'),      // compiled: dist/ → root
+        path.resolve(__dirname, '../../../.env'),   // compiled: dist/src/ → root
+        '.env',                                      // last resort: cwd
+      ],
     }),
     // ─── Structured logging (Pino) ──────────────────────────────────────────
     // Replaces Nest's default console logger with JSON-line output in prod and

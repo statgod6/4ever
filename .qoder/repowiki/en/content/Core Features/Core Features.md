@@ -5,18 +5,27 @@
 - [app.module.ts](file://backend/src/app.module.ts)
 - [main.ts](file://backend/src/main.ts)
 - [schema.prisma](file://backend/prisma/schema.prisma)
-- [orchestration.module.ts](file://backend/src/orchestration/orchestration.module.ts)
+- [orchestration.controller.ts](file://backend/src/orchestration/orchestration.controller.ts)
 - [orchestration.service.ts](file://backend/src/orchestration/orchestration.service.ts)
-- [thought-analysis.graph.ts](file://backend/src/orchestration/graph/thought-analysis.graph.ts)
-- [state.ts](file://backend/src/orchestration/graph/state.ts)
-- [retrieve-memory.node.ts](file://backend/src/orchestration/graph/nodes/retrieve-memory.node.ts)
-- [relationships.module.ts](file://backend/src/relationships/relationships.module.ts)
-- [planner.module.ts](file://backend/src/planner/planner.module.ts)
-- [messaging.module.ts](file://backend/src/messaging/messaging.module.ts)
+- [context-scope.ts](file://backend/src/orchestration/context-scope.ts)
+- [personas.controller.ts](file://backend/src/personas/personas.controller.ts)
+- [relationships.controller.ts](file://backend/src/relationships/relationships.controller.ts)
+- [planner.controller.ts](file://backend/src/planner/planner.controller.ts)
+- [messages.controller.ts](file://backend/src/messaging/messages.controller.ts)
 - [MyCircle.tsx](file://frontend/src/pages/MyCircle.tsx)
-- [Dashboard.tsx](file://frontend/src/pages/Dashboard.tsx)
-- [MyCircleScreen.tsx](file://mobile/src/screens/MyCircleScreen.tsx)
+- [core-chat-loop.ts](file://backend/src/orchestration/graph/core-chat-loop.ts)
+- [thought-analysis.graph.ts](file://backend/src/orchestration/graph/thought-analysis.graph.ts)
+- [CoreChat.tsx](file://frontend/src/pages/CoreChat.tsx)
+- [orchestration.ts](file://frontend/src/api/orchestration.ts)
 </cite>
+
+## Update Summary
+**Changes Made**
+- Enhanced persona orchestration section to document new streaming ReAct loop capabilities
+- Updated conversation management documentation to include comprehensive streaming chat orchestration
+- Added detailed coverage of real-time thinking streams and tool activity indicators
+- Expanded persona direct chat streaming capabilities with reasoning deltas
+- Updated architecture diagrams to reflect streaming event-driven flows
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -31,398 +40,353 @@
 
 ## Introduction
 This document explains the core features that define 4Ever as a personal AI life management system. It focuses on:
-- Multi-persona thought analysis (persona orchestration)
-- Semantic memory system
-- Relationship intelligence (relationship circle)
-- Daily planning
-- Real-time communication
+- Multi-persona thought analysis and persona orchestration with real-time streaming
+- Semantic memory system and memory consolidation
+- Relationship intelligence and the relationship circle
+- Daily planning and task lifecycle
+- Real-time communication with tri-chat mediator and streaming conversation management
 
-These features are designed to work together: persona orchestration analyzes thoughts and conversations, the semantic memory system retrieves and consolidates meaningful experiences, relationship intelligence keeps social dynamics healthy, daily planning aligns actions with goals, and real-time communication enables live mediation and messaging. The result is a cohesive, adaptive AI companion that evolves with the user’s life.
+These features integrate to form a cohesive platform where AI personas think alongside the user with real-time streaming feedback, memories inform decisions, relationships are tracked and nurtured, plans evolve dynamically, and conversations are supported by a mediator that surfaces actionable insights with immediate response streaming.
 
 ## Project Structure
-At runtime, the backend composes a modular NestJS application with dedicated modules for each capability. The orchestration module is central, coordinating persona orchestration, semantic memory, and contextual synthesis. Relationship intelligence, daily planning, and real-time messaging are provided by their respective modules. The frontend and mobile apps expose intuitive UIs for each feature area.
+At runtime, the backend composes a modular NestJS application with dedicated modules for each capability. The orchestration module coordinates persona orchestration, semantic memory, and contextual synthesis with streaming capabilities. Controllers expose REST endpoints under a single API namespace, with rate limiting and JWT authentication applied globally.
 
 ```mermaid
 graph TB
-subgraph "Backend Modules"
-A["AuthModule"]
-B["UsersModule"]
-C["ThoughtsModule"]
-D["PersonasModule"]
-E["OrchestrationModule"]
-F["InsightsModule"]
-G["PlannerModule"]
-H["CheckInModule"]
-I["ActionsModule"]
-J["ReflectionsModule"]
-K["KnowledgeBaseModule"]
-L["RelationshipsModule"]
-M["RitualsModule"]
-N["LifeEventsModule"]
-O["TensionsModule"]
-P["DimensionsModule"]
-Q["MessagingModule"]
-R["KnowledgeWorkerModule"]
-S["AdminModule"]
-T["UsageModule"]
-U["ConsentModule"]
-V["HealthModule"]
-W["SupportModule"]
-X["AgentActionsModule"]
+subgraph "Backend Runtime"
+APP["AppModule"]
+AUTH["AuthModule"]
+ORCH["OrchestrationModule"]
+PERS["PersonasModule"]
+REL["RelationshipsModule"]
+PLAN["PlannerModule"]
+MSG["MessagingModule"]
+DIM["DimensionsModule"]
+KBASE["KnowledgeBaseModule"]
+SKILLS["SkillsModule"]
+MEMOS["MemoryOsModule"]
 end
-E --> K
-E --> P
-E --> X
-L --> M
-L --> N
-L --> O
-Q --> L
-G --> P
-C --> E
-D --> E
-B --> E
+APP --> AUTH
+APP --> ORCH
+APP --> PERS
+APP --> REL
+APP --> PLAN
+APP --> MSG
+APP --> DIM
+APP --> KBASE
+APP --> SKILLS
+APP --> MEMOS
 ```
 
 **Diagram sources**
-- [app.module.ts:34-163](file://backend/src/app.module.ts#L34-L163)
-- [orchestration.module.ts:11-17](file://backend/src/orchestration/orchestration.module.ts#L11-L17)
-- [relationships.module.ts:7-13](file://backend/src/relationships/relationships.module.ts#L7-L13)
-- [planner.module.ts:5-9](file://backend/src/planner/planner.module.ts#L5-L9)
-- [messaging.module.ts:14-36](file://backend/src/messaging/messaging.module.ts#L14-L36)
+- [app.module.ts:34-162](file://backend/src/app.module.ts#L34-L162)
 
 **Section sources**
-- [app.module.ts:34-163](file://backend/src/app.module.ts#L34-L163)
+- [app.module.ts:34-162](file://backend/src/app.module.ts#L34-L162)
+- [main.ts:24-125](file://backend/src/main.ts#L24-L125)
 
 ## Core Components
-- Persona orchestration: A LangGraph-based workflow that retrieves memories, loads thread history, builds persona prompts, runs multiple personas, saves responses, synthesizes insights, updates summaries, and stores new memories.
-- Semantic memory: Vector-backed recall with embedding similarity and importance-aware scoring, plus memory consolidation and lifecycle management.
-- Relationship intelligence: A relationship circle with people, notes, rituals, life events, and tension tracking, plus drift detection and love languages.
-- Daily planning: A seven-day rolling planner with tasks, statuses, and completion analytics.
-- Real-time communication: Live messaging with tri-chat mediation, shared notes, reactions, and presence-awareness.
+This section introduces the five pillars of 4Ever's personal AI life management with enhanced streaming capabilities:
+
+- **Persona orchestration**: Multi-persona thought analysis, persona chat, and core chat with contextual synthesis and real-time streaming
+- **Semantic memory**: Vector-backed memory storage, embeddings, and memory consolidation
+- **Relationship intelligence**: Relationship circle, notes, life events, rituals, and tension tracking
+- **Daily planning**: Day plans, tasks, completion stats, and insights
+- **Real-time communication**: Direct messaging, tri-chat mediator, shared notes, and streaming conversation management
+
+Each component is backed by strongly typed database models and exposed via REST endpoints with comprehensive streaming support. The orchestration layer ties them together by building context from user data and orchestrating persona responses with real-time feedback.
 
 **Section sources**
-- [orchestration.service.ts:24-74](file://backend/src/orchestration/orchestration.service.ts#L24-L74)
-- [orchestration.service.ts:567-764](file://backend/src/orchestration/orchestration.service.ts#L567-L764)
-- [schema.prisma:170-202](file://backend/prisma/schema.prisma#L170-L202)
-- [relationships.module.ts:7-13](file://backend/src/relationships/relationships.module.ts#L7-L13)
-- [planner.module.ts:5-9](file://backend/src/planner/planner.module.ts#L5-L9)
-- [messaging.module.ts:14-36](file://backend/src/messaging/messaging.module.ts#L14-L36)
+- [schema.prisma:12-800](file://backend/prisma/schema.prisma#L12-L800)
+- [orchestration.controller.ts:17-369](file://backend/src/orchestration/orchestration.controller.ts#L17-L369)
+- [personas.controller.ts:17-56](file://backend/src/personas/personas.controller.ts#L17-L56)
+- [relationships.controller.ts:18-92](file://backend/src/relationships/relationships.controller.ts#L18-L92)
+- [planner.controller.ts:16-63](file://backend/src/planner/planner.controller.ts#L16-L63)
+- [messages.controller.ts:21-227](file://backend/src/messaging/messages.controller.ts#L21-L227)
 
 ## Architecture Overview
-The orchestration engine orchestrates persona analysis and synthesis across multiple domains. It composes contextual blocks from user profile, calendars, moods, completion stats, pending actions, memories, relationships, upcoming events, connections, unread messages, shared notes, session summaries, and life wheel snapshots. These blocks inform both persona-level and core chat-level reasoning.
+The orchestration service compiles a LangGraph thought analysis pipeline and builds context from multiple domains (user profile, planner, mood, actions, memories, relationships, messaging, sessions). It supports streaming persona responses with real-time thinking indicators and tool activity monitoring, and provides comprehensive streaming capabilities for both persona-direct chat and core chat orchestration.
 
 ```mermaid
-sequenceDiagram
-participant Client as "Client App"
-participant Core as "OrchestrationService"
-participant DB as "PrismaService"
-participant KB as "KnowledgeBaseService"
-participant Ont as "OntologyService"
-participant Dim as "DimensionsService"
-Client->>Core : "Build persona/core chat context"
-Core->>DB : "Fetch user profile, memories, plans, moods, actions"
-Core->>KB : "Compose persona knowledge base"
-Core->>Ont : "Compose relational/relational snapshots"
-Core->>Dim : "Fetch life wheel and weekly check-in"
-DB-->>Core : "Contextual data"
-Core-->>Client : "Context blocks injected into prompts"
+graph TB
+CTRL["OrchestrationController"]
+SVC["OrchestrationService"]
+PRISMA["PrismaService"]
+KB["KnowledgeBaseService"]
+ONTO["OntologyService"]
+DIM["DimensionsService"]
+SK["SkillsService"]
+MM["MemoryManagerService"]
+CB["ContextBuilderService"]
+PD["PatternDetectorService"]
+CORELOOP["CoreChatStreamLoop"]
+THOUGHTGRAPH["ThoughtAnalysisGraph"]
+CTRL --> SVC
+SVC --> PRISMA
+SVC --> KB
+SVC --> ONTO
+SVC --> DIM
+SVC --> SK
+SVC --> MM
+SVC --> CB
+SVC --> PD
+SVC --> CORELOOP
+SVC --> THOUGHTGRAPH
 ```
 
 **Diagram sources**
-- [orchestration.service.ts:660-764](file://backend/src/orchestration/orchestration.service.ts#L660-L764)
-- [orchestration.service.ts:572-606](file://backend/src/orchestration/orchestration.service.ts#L572-L606)
+- [orchestration.controller.ts:17-369](file://backend/src/orchestration/orchestration.controller.ts#L17-L369)
+- [orchestration.service.ts:24-44](file://backend/src/orchestration/orchestration.service.ts#L24-L44)
+- [core-chat-loop.ts:1-116](file://backend/src/orchestration/graph/core-chat-loop.ts#L1-L116)
+- [thought-analysis.graph.ts:1-68](file://backend/src/orchestration/graph/thought-analysis.graph.ts#L1-L68)
+
+**Section sources**
+- [orchestration.service.ts:49-77](file://backend/src/orchestration/orchestration.service.ts#L49-L77)
+- [orchestration.service.ts:576-610](file://backend/src/orchestration/orchestration.service.ts#L576-L610)
+- [orchestration.service.ts:663-767](file://backend/src/orchestration/orchestration.service.ts#L663-L767)
 
 ## Detailed Component Analysis
 
-### Persona Orchestration (Multi-persona Thought Analysis)
-Persona orchestration is implemented as a LangGraph workflow that:
-- Retrieves relevant memories using semantic embeddings
-- Loads thread history and existing summaries
-- Builds persona-specific prompts with contextual blocks
-- Runs multiple personas in parallel
-- Saves responses and updates thread summaries
-- Synthesizes core insights and profile updates
-- Stores new memories and consolidates older ones
+### Enhanced Persona Orchestration with Streaming Capabilities
+Persona orchestration powers multi-persona thought analysis and conversational AI with comprehensive streaming support. It builds rich context from user profile, planner, mood, completion stats, pending actions, memories, and optionally the relationship circle and life dimensions. It supports:
+
+- **Analyze thought with multiple personas** - Real-time streaming with thinking indicators and tool activity monitoring
+- **Reply to persona with streaming SSE** - Token-by-token delivery with thinking deltas and reasoning transparency
+- **Quick chat with a persona** - Standard non-streaming responses for simple queries
+- **Core chat with broader life context** - Advanced streaming orchestration with ReAct loop capabilities
+- **Persona-direct chat with history** - Personalized streaming chat with conversation context and reasoning visibility
 
 ```mermaid
-flowchart TD
-Start(["Invoke Thought Analysis"]) --> Retrieve["Retrieve relevant memories<br/>via embeddings + importance"]
-Retrieve --> History["Load thread history + summary"]
-History --> Prompts["Build persona prompts<br/>with contextual blocks"]
-Prompts --> Run["Run personas in parallel"]
-Run --> Save["Save responses + runs"]
-Save --> Core["Core synthesis<br/>actions + profile updates"]
-Core --> Summary["Update thread summary"]
-Summary --> Store["Store new memories"]
-Store --> End(["Complete"])
+sequenceDiagram
+participant FE as "Frontend"
+participant OC as "OrchestrationController"
+participant OS as "OrchestrationService"
+participant PR as "PrismaService"
+FE->>OC : POST /api/orchestration/reply-persona/stream
+OC->>OS : replyToPersonaStream(userId, thoughtId, personaId, message)
+OS->>PR : buildPersonaContext(userId, message, threadId)
+PR-->>OS : context parts
+OS-->>OC : AsyncGenerator with StreamEvents
+OC-->>FE : SSE events : thinking, token, response, done
 ```
 
 **Diagram sources**
-- [thought-analysis.graph.ts:29-67](file://backend/src/orchestration/graph/thought-analysis.graph.ts#L29-L67)
-- [state.ts:88-177](file://backend/src/orchestration/graph/state.ts#L88-L177)
+- [orchestration.controller.ts:59-94](file://backend/src/orchestration/orchestration.controller.ts#L59-L94)
+- [orchestration.service.ts:1338-1361](file://backend/src/orchestration/orchestration.service.ts#L1338-L1361)
 
-Implementation highlights:
-- Memory retrieval uses vector similarity with a fallback to importance-based selection.
-- Context building is scoped to persona or core chat depending on intent.
-- Core synthesis produces actionable items and potential profile updates.
-- Memory lifecycle includes deduplication, access tracking, and consolidation.
+**Updated** Enhanced with comprehensive streaming ReAct loop improvements including thinking deltas, tool activity monitoring, and real-time reasoning transparency.
+
+Key implementation details:
+- **StreamLoopConfig**: Defines streaming configuration with timeout handling and tool binding
+- **StreamEvent interface**: Supports thinking, tool_start, tool_end, token, token_reset, response, and error events
+- **Thinking deltas**: Real-time reasoning transparency with incremental thinking content streaming
+- **Tool activity monitoring**: Live tool execution indicators with start/end notifications
+- **Token streaming**: Progressive text delivery with automatic message composition
+- **Timeout handling**: 300-second timeout protection with graceful error recovery
+
+Practical workflows:
+- **Multi-persona analysis**: Stream persona responses with real-time thinking indicators and tool activity
+- **Interactive reasoning**: Observe AI reasoning process through thinking deltas during complex analysis
+- **Real-time collaboration**: Monitor tool execution progress and receive immediate feedback on persona actions
+- **Enhanced debugging**: Transparent reasoning process enables better understanding of AI decision-making
 
 **Section sources**
-- [orchestration.service.ts:512-565](file://backend/src/orchestration/orchestration.service.ts#L512-L565)
-- [orchestration.service.ts:567-764](file://backend/src/orchestration/orchestration.service.ts#L567-L764)
-- [retrieve-memory.node.ts:11-21](file://backend/src/orchestration/graph/nodes/retrieve-memory.node.ts#L11-L21)
-- [state.ts:88-177](file://backend/src/orchestration/graph/state.ts#L88-L177)
+- [core-chat-loop.ts:11-22](file://backend/src/orchestration/graph/core-chat-loop.ts#L11-L22)
+- [core-chat-loop.ts:28-116](file://backend/src/orchestration/graph/core-chat-loop.ts#L28-L116)
+- [orchestration.controller.ts:59-94](file://backend/src/orchestration/orchestration.controller.ts#L59-L94)
+- [orchestration.controller.ts:228-257](file://backend/src/orchestration/orchestration.controller.ts#L228-L257)
+- [orchestration.service.ts:1338-1361](file://backend/src/orchestration/orchestration.service.ts#L1338-L1361)
+- [orchestration.service.ts:2516-2636](file://backend/src/orchestration/orchestration.service.ts#L2516-L2636)
 
 ### Semantic Memory System
-The semantic memory system supports long-term recall and consolidation:
-- Embeddings are stored alongside memories for vector search.
-- Retrieval blends embedding similarity, importance score, recency, and access frequency.
-- Access counts and last-access timestamps help surface relevant memories.
-- Deduplication and consolidation reduce noise and improve recall quality.
+The semantic memory system stores memories with embeddings, confidence, strength, and entity/link metadata. It supports:
+- Listing and searching memories
+- Creating, updating, and deleting memories
+- Consolidating memories and computing stats
+- Access tracking and reinforcement
 
 ```mermaid
 erDiagram
+USER ||--o{ MEMORY : "has"
 MEMORY {
 uuid id PK
 uuid user_id FK
-string memory_type
+enum memory_type
 text content
 float importance_score
 uuid source_thread_id
 datetime last_accessed_at
 int access_count
-string status
-string source
-datetime created_at
-datetime updated_at
+enum status
+uuid superseded_by_id
+string category
+enum source
+float confidence
+float strength
+datetime last_reinforced_at
+json entities
+json links
+json emotion
 }
 MEMORY_EMBEDDING {
 uuid id PK
 uuid memory_id FK
 vector embedding
-datetime created_at
 }
-MEMORY_EMBEDDING }o--|| MEMORY : "belongs to"
 ```
 
 **Diagram sources**
-- [schema.prisma:170-202](file://backend/prisma/schema.prisma#L170-L202)
+- [schema.prisma:179-222](file://backend/prisma/schema.prisma#L179-L222)
+
+Practical workflows:
+- Memory dashboard: Browse memories by status, type, and source.
+- Search: Find relevant memories using vector similarity and metadata filters.
+- Consolidation: Periodically consolidate overlapping or outdated memories.
 
 **Section sources**
-- [schema.prisma:170-202](file://backend/prisma/schema.prisma#L170-L202)
-- [orchestration.service.ts:512-565](file://backend/src/orchestration/orchestration.service.ts#L512-L565)
+- [schema.prisma:179-222](file://backend/prisma/schema.prisma#L179-L222)
+- [orchestration.controller.ts:277-343](file://backend/src/orchestration/orchestration.controller.ts#L277-L343)
+- [orchestration.service.ts:516-569](file://backend/src/orchestration/orchestration.service.ts#L516-L569)
 
-### Relationship Intelligence (Relationship Circle)
-Relationship intelligence centers on a “relationship circle” that tracks:
-- People: names, relationships, descriptions, communication styles, love languages, and interaction history
-- Notes: sentiment-tagged, topic-assigned notes per person
-- Rituals: frequency-based touchpoints with streak tracking
-- Life events: upcoming milestones and recurring celebrations
-- Tensions: intensity, status, and resolution tracking
+### Relationship Intelligence and Relationship Circle
+Relationship intelligence tracks people in the user's circle, notes, life events, rituals, and tensions. It surfaces drift warnings, overdue rituals, and upcoming events to help maintain relationships proactively.
 
 ```mermaid
 erDiagram
-USER {
-uuid id PK
-string name
-string phone_number
-string email
-string avatar_url
-}
-RELATIONSHIP_PERSON {
-uuid id PK
-uuid user_id FK
-string name
-string relationship
-string description
-string dynamic
-string key_context
-string communication_style
-string love_language
-uuid linked_persona_id
-uuid linked_user_id
-string phone_number
-boolean is_active
-datetime last_interaction_at
-int interaction_count
-datetime created_at
-datetime updated_at
-}
-RELATIONSHIP_NOTE {
-uuid id PK
-uuid person_id FK
-text content
-string source
-string sentiment
-string topic
-datetime created_at
-}
-RELATIONSHIP_RITUAL {
-uuid id PK
-uuid user_id FK
-uuid person_id FK
-string title
-string frequency
-int day_of_week
-datetime last_done_at
-int streak
-boolean is_active
-datetime created_at
-datetime updated_at
-}
-LIFE_EVENT {
-uuid id PK
-uuid user_id FK
-uuid person_id FK
-string title
-date event_date
-string event_type
-boolean is_recurring
-int remind_days_before
-datetime created_at
-}
-TENSION_ENTRY {
-uuid id PK
-uuid user_id FK
-uuid person_id FK
-string title
-text description
-int intensity
-string status
-datetime cool_down_until
-datetime resolved_at
-string resolution
-datetime created_at
-datetime updated_at
-}
-USER ||--o{ RELATIONSHIP_PERSON : "has"
+USER ||--o{ RELATIONSHIP_PERSON : "owns"
+USER ||--o{ RELATIONSHIP_RITUAL : "owns"
+USER ||--o{ LIFE_EVENT : "owns"
+USER ||--o{ TENSION_ENTRY : "owns"
 RELATIONSHIP_PERSON ||--o{ RELATIONSHIP_NOTE : "has"
-RELATIONSHIP_PERSON ||--o{ RELATIONSHIP_RITUAL : "has"
-RELATIONSHIP_PERSON ||--o{ LIFE_EVENT : "involved in"
-RELATIONSHIP_PERSON ||--o{ TENSION_ENTRY : "involved in"
+RELATIONSHIP_PERSON ||--o{ LIFE_EVENT : "involved"
+RELATIONSHIP_PERSON ||--o{ RELATIONSHIP_RITUAL : "involved"
+RELATIONSHIP_PERSON ||--o{ TENSION_ENTRY : "involved"
 ```
 
 **Diagram sources**
-- [schema.prisma:401-499](file://backend/prisma/schema.prisma#L401-L499)
+- [schema.prisma:442-540](file://backend/prisma/schema.prisma#L442-L540)
 
-UI touchpoints:
-- Web dashboard cards and navigation to the relationship circle
-- Mobile and web screens for people, rituals, events, and tensions
-- Love language and drift detection indicators
+Frontend integration:
+- The MyCircle page aggregates tabs for rituals, life events, tensions, graph, and annual review, integrating with relationship APIs.
 
 **Section sources**
-- [relationships.module.ts:7-13](file://backend/src/relationships/relationships.module.ts#L7-L13)
-- [schema.prisma:401-499](file://backend/prisma/schema.prisma#L401-L499)
-- [MyCircle.tsx:45-55](file://frontend/src/pages/MyCircle.tsx#L45-L55)
-- [Dashboard.tsx:473-489](file://frontend/src/pages/Dashboard.tsx#L473-L489)
-- [MyCircleScreen.tsx:35-65](file://mobile/src/screens/MyCircleScreen.tsx#L35-L65)
+- [relationships.controller.ts:18-92](file://backend/src/relationships/relationships.controller.ts#L18-L92)
+- [schema.prisma:442-540](file://backend/prisma/schema.prisma#L442-L540)
+- [MyCircle.tsx:1-27](file://frontend/src/pages/MyCircle.tsx#L1-L27)
 
 ### Daily Planning
-Daily planning provides a seven-day rolling schedule with tasks, statuses, and analytics:
-- Fetches today, tomorrow, and the next five days
-- Aggregates tasks by time slots and sorts by sort order
-- Computes completion statistics and highlights repeated patterns
-- Integrates with persona orchestration for planner-focused context
+Daily planning centers around day plans and tasks with status tracking, completion insights, and lifecycle updates.
 
 ```mermaid
-flowchart TD
-Init(["Start"]) --> Dates["Compute 7-day range"]
-Dates --> Query["Query DayPlan + PlanTask for user"]
-Query --> Format["Format tasks by date and time slot"]
-Format --> Stats["Compute completion stats (14 days)"]
-Stats --> Output["Return planner context"]
-Output --> End(["Done"])
+erDiagram
+USER ||--o{ DAY_PLAN : "has"
+DAY_PLAN ||--o{ PLAN_TASK : "contains"
+PLAN_TASK {
+uuid id PK
+uuid plan_id FK
+string time_slot
+string task
+string insight
+enum status
+datetime completed_at
+int sort_order
+}
 ```
 
 **Diagram sources**
-- [orchestration.service.ts:77-125](file://backend/src/orchestration/orchestration.service.ts#L77-L125)
-- [orchestration.service.ts:156-209](file://backend/src/orchestration/orchestration.service.ts#L156-L209)
+- [schema.prisma:270-298](file://backend/prisma/schema.prisma#L270-L298)
+
+Practical workflows:
+- Create or update a plan for a given date.
+- Toggle task statuses and receive insights.
+- Review completion stats over time.
 
 **Section sources**
-- [planner.module.ts:5-9](file://backend/src/planner/planner.module.ts#L5-L9)
-- [orchestration.service.ts:77-125](file://backend/src/orchestration/orchestration.service.ts#L77-L125)
-- [orchestration.service.ts:156-209](file://backend/src/orchestration/orchestration.service.ts#L156-L209)
+- [planner.controller.ts:16-63](file://backend/src/planner/planner.controller.ts#L16-L63)
+- [schema.prisma:270-298](file://backend/prisma/schema.prisma#L270-L298)
 
-### Real-Time Communication
-Real-time communication integrates live messaging with tri-chat mediation:
-- Connections and direct messages with read/status tracking
-- Shared notes and reactions
-- Mediator sessions with suggested actions and agreements
-- Presence-awareness and one-sided clearing with continuity summaries
+### Enhanced Real-Time Communication with Streaming Management
+Real-time communication includes direct messaging, reactions, shared notes, and tri-chat mediator sessions with comprehensive streaming capabilities. The mediator can propose actions and agreements, sessions can be summarized and managed, and all conversations support real-time streaming with thinking indicators.
 
 ```mermaid
 sequenceDiagram
-participant A as "User A"
-participant B as "User B"
-participant Conn as "Connection"
-participant Msg as "DirectMessage"
-participant Med as "MediationSession"
-participant Notes as "SharedNote"
-A->>Conn : "Create/accept connection"
-A->>Msg : "Send message"
-B->>Msg : "Read/deliver"
-A->>Med : "Start mediation session"
-Med-->>A : "Suggest ritual/task/tension"
-A->>Notes : "Add shared note"
-Notes-->>B : "View note"
+participant U1 as "User A"
+participant U2 as "User B"
+participant MC as "MessagesController"
+participant MS as "MessagingService"
+participant MED as "MediatorService"
+U1->>MC : GET /api/messages/conversations
+MC->>MS : getConversationList(userId)
+U1->>MC : POST /api/messages/conversation/ : connectionId/tri-chat/toggle
+MC->>MED : toggleTriChat(userId, connectionId, enabled)
+U1->>MC : POST /api/messages/conversation/ : connectionId/summon-mediator
+MC->>MED : summonMediatorSync(userId, connectionId, opts)
+MED-->>U1 : Proposed actions/agreements
 ```
 
 **Diagram sources**
-- [schema.prisma:516-596](file://backend/prisma/schema.prisma#L516-L596)
-- [schema.prisma:626-637](file://backend/prisma/schema.prisma#L626-L637)
-- [messaging.module.ts:14-36](file://backend/src/messaging/messaging.module.ts#L14-L36)
+- [messages.controller.ts:21-227](file://backend/src/messaging/messages.controller.ts#L21-L227)
+
+**Updated** Enhanced with comprehensive streaming capabilities including thinking deltas, tool activity monitoring, and real-time reasoning transparency for all conversation management features.
+
+Practical workflows:
+- Start or manage tri-chat sessions with a mediator and real-time streaming feedback.
+- Clear history (one-sided) to reset continuity while preserving the other user's view.
+- Rename the mediator and accept proposed actions with immediate response streaming.
+- Monitor tool execution progress and receive live feedback on mediator actions.
 
 **Section sources**
-- [messaging.module.ts:14-36](file://backend/src/messaging/messaging.module.ts#L14-L36)
-- [schema.prisma:516-596](file://backend/prisma/schema.prisma#L516-L596)
-- [schema.prisma:626-637](file://backend/prisma/schema.prisma#L626-L637)
+- [messages.controller.ts:121-227](file://backend/src/messaging/messages.controller.ts#L121-L227)
 
 ## Dependency Analysis
-The orchestration module depends on knowledge base, ontology, dimensions, agent actions, and skills to enrich persona and core chat reasoning. Relationship intelligence, daily planning, and messaging modules supply complementary context and capabilities.
+The orchestration module depends on several specialized services to assemble context and drive persona orchestration with streaming capabilities. The controller enforces rate limits and quotas, and the service orchestrates context building, streaming, and real-time event emission.
 
 ```mermaid
 graph LR
-Orchestration["OrchestrationService"] --> KB["KnowledgeBaseService"]
-Orchestration --> Ont["OntologyService"]
-Orchestration --> Dim["DimensionsService"]
-Orchestration --> Agent["AgentActionsService"]
-Orchestration --> Skills["SkillsService"]
-Relationships["RelationshipsModule"] --> Orchestration
-Planner["PlannerModule"] --> Orchestration
-Messaging["MessagingModule"] --> Orchestration
+OC["OrchestrationController"] --> OS["OrchestrationService"]
+OS --> PRISMA["PrismaService"]
+OS --> KB["KnowledgeBaseService"]
+OS --> ONTO["OntologyService"]
+OS --> DIM["DimensionsService"]
+OS --> SK["SkillsService"]
+OS --> MM["MemoryManagerService"]
+OS --> CB["ContextBuilderService"]
+OS --> PD["PatternDetectorService"]
+OS --> CORELOOP["CoreChatStreamLoop"]
+OS --> THOUGHTGRAPH["ThoughtAnalysisGraph"]
 ```
 
 **Diagram sources**
-- [orchestration.module.ts:11-17](file://backend/src/orchestration/orchestration.module.ts#L11-L17)
-- [relationships.module.ts:7-13](file://backend/src/relationships/relationships.module.ts#L7-L13)
-- [planner.module.ts:5-9](file://backend/src/planner/planner.module.ts#L5-L9)
-- [messaging.module.ts:14-36](file://backend/src/messaging/messaging.module.ts#L14-L36)
+- [orchestration.controller.ts:17-369](file://backend/src/orchestration/orchestration.controller.ts#L17-L369)
+- [orchestration.service.ts:24-44](file://backend/src/orchestration/orchestration.service.ts#L24-L44)
+- [core-chat-loop.ts:1-116](file://backend/src/orchestration/graph/core-chat-loop.ts#L1-L116)
+- [thought-analysis.graph.ts:1-68](file://backend/src/orchestration/graph/thought-analysis.graph.ts#L1-L68)
 
 **Section sources**
-- [orchestration.module.ts:11-17](file://backend/src/orchestration/orchestration.module.ts#L11-L17)
+- [orchestration.service.ts:24-44](file://backend/src/orchestration/orchestration.service.ts#L24-L44)
+- [orchestration.controller.ts:17-369](file://backend/src/orchestration/orchestration.controller.ts#L17-L369)
 
 ## Performance Considerations
-- Streaming timeouts and rate limiting: The orchestration service enforces streaming timeouts and relies on throttling guards to protect resources.
-- Parallel context fetching: Context builders use Promise.all to minimize latency across heterogeneous data sources.
-- Vector search with fallback: Memory retrieval prefers embeddings but falls back to importance/recency scoring.
-- Compression and CORS: Responses are compressed except for streaming; CORS origins are validated in production.
-
-**Section sources**
-- [orchestration.service.ts:43-44](file://backend/src/orchestration/orchestration.service.ts#L43-L44)
-- [app.module.ts:133-137](file://backend/src/app.module.ts#L133-L137)
-- [main.ts:51-60](file://backend/src/main.ts#L51-L60)
-- [main.ts:68-79](file://backend/src/main.ts#L68-L79)
+- **Streaming optimization**: SSE streaming is configured to bypass compression to preserve real-time delivery with thinking deltas and tool activity monitoring.
+- **Rate limiting**: Throttler buckets protect LLM-heavy endpoints; usage quotas guard per-user spending with streaming endpoints included.
+- **Embeddings**: Vector similarity queries leverage PostgreSQL vector extension for efficient retrieval.
+- **Parallel context loading**: Many context sources are fetched concurrently to reduce latency, especially important for streaming performance.
+- **Timeout management**: 300-second timeout protection ensures streaming responses don't hang indefinitely.
+- **Event buffering**: Frontend implements robust SSE parsing with buffer management for reliable streaming delivery.
 
 ## Troubleshooting Guide
-- Missing API keys: If the OpenRouter API key is missing or invalid, persona responses will fail. The service logs warnings and continues with reduced capability.
-- Memory retrieval failures: Vector search may fall back to importance-based retrieval; errors are logged and non-fatal.
-- CORS misconfiguration: In production, CORS_ORIGINS must be explicitly set; otherwise, startup fails fast.
-- Logging and redaction: Logs include correlation IDs and redact sensitive fields; verify redaction paths if PII appears in logs.
+Common issues and remedies:
+- **Authentication failures**: Ensure JWT guard is applied and tokens are valid for streaming endpoints.
+- **Quota exceeded**: Usage quotas throttle requests; reduce frequency or upgrade, including streaming endpoint usage.
+- **Missing embeddings**: Vector similarity requires embeddings; regenerate if missing.
+- **Streaming errors**: Controller emits a final SSE event on error and closes the stream gracefully.
+- **Timeout issues**: 300-second timeout indicates slow LLM responses or network issues; retry with simpler queries.
+- **Parsing failures**: Frontend implements robust SSE parsing with error handling for malformed lines.
 
 **Section sources**
-- [orchestration.service.ts:56-61](file://backend/src/orchestration/orchestration.service.ts#L56-L61)
-- [main.ts:72-75](file://backend/src/main.ts#L72-L75)
-- [app.module.ts:72-97](file://backend/src/app.module.ts#L72-L97)
+- [main.ts:90-94](file://backend/src/main.ts#L90-L94)
+- [orchestration.controller.ts:67-94](file://backend/src/orchestration/orchestration.controller.ts#L67-L94)
+- [orchestration.controller.ts:143-152](file://backend/src/orchestration/orchestration.controller.ts#L143-L152)
 
 ## Conclusion
-4Ever’s core features form a tightly integrated AI life management system. Persona orchestration drives deep reflection and synthesis, semantic memory ensures meaningful continuity, relationship intelligence maintains social health, daily planning aligns actions with goals, and real-time communication enables live mediation and connection. Together, they create a responsive, evolving personal AI companion.
+4Ever's core features form a tightly integrated personal AI life management system with comprehensive streaming capabilities. Persona orchestration thinks deeply with the user through real-time streaming feedback, semantic memory remembers and consolidates experiences, relationship intelligence keeps bonds strong, daily planning adapts to progress, and real-time communication is empowered by a mediator with immediate response streaming. The enhanced streaming ReAct loop improvements provide unprecedented transparency into AI reasoning processes, while comprehensive tool activity monitoring enhances user trust and understanding. Together, they create a responsive, evolving companion for everyday life with immediate, transparent, and highly interactive AI assistance.

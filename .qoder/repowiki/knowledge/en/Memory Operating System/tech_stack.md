@@ -1,0 +1,1 @@
+Uses PostgreSQL `vector` extension for cosine similarity searches in `memory_embeddings`; leverages `@nestjs/schedule` for background decay jobs and `@langchain/openrouter` for memory classification and pattern synthesis.

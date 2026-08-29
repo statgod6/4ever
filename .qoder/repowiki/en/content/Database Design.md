@@ -40,7 +40,19 @@
 - [add_life_dimensions migration](file://backend/prisma/migrations/20260510170000_add_life_dimensions/migration.sql)
 - [add_sign_in_with_apple migration](file://backend/prisma/migrations/20260510180000_add_sign_in_with_apple/migration.sql)
 - [add_llm_usage_and_token_quotas migration](file://backend/prisma/migrations/20260510220000_add_llm_usage_and_token_quotas/migration.sql)
+- [20260630162100_memory_os_schema migration](file://backend/prisma/migrations/20260630162100_memory_os_schema/migration.sql)
 </cite>
+
+## Update Summary
+**Changes Made**
+- Added comprehensive documentation for Memory OS schema enhancements
+- Documented new confidence and strength metrics for memories
+- Added entity extraction capabilities with JSONB storage
+- Documented cross-referencing links and emotional dimensions
+- Added new memory_patterns table for auto-discovered behavioral patterns
+- Updated Memory Manager Service with new field handling
+- Added Pattern Detector Service documentation
+- Updated migration management to include Memory OS schema
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -56,6 +68,8 @@
 
 ## Introduction
 This document describes the 4Ever database schema and data model, focusing on the entities Users, Thoughts, Personas, Memories, Relationships, and related subsystems. It explains entity relationships, field definitions, data types, primary and foreign keys, indexes, and constraints. It also documents the two-layer memory architecture (short-term thread summaries and long-term pgvector-embedded memories), semantic search capabilities, data lifecycle management, migration history, and operational considerations such as indexing, caching, and quotas.
+
+**Updated** Enhanced with Memory OS schema enhancements including confidence scores, strength metrics, entity extraction capabilities, cross-referencing links, emotional dimensions, and auto-discovered behavioral patterns.
 
 ## Project Structure
 The schema is defined in Prisma and evolves through PostgreSQL migrations. The Prisma schema defines models and relations; migrations define the canonical database DDL and indexes. The vector extension is enabled for pgvector-based similarity search.
@@ -101,6 +115,7 @@ M_CONSENT["20260510160032_add_consent_and_export_delete"]
 M_DIM2["20260510170000_add_life_dimensions"]
 M_APPLE["20260510180000_add_sign_in_with_apple"]
 M_QUOTA["20260510220000_add_llm_usage_and_token_quotas"]
+M_MEM_OS["20260630162100_memory_os_schema"]
 end
 PRISMA --> M_INIT
 PRISMA --> M_MEM
@@ -137,6 +152,7 @@ PRISMA --> M_CONSENT
 PRISMA --> M_DIM2
 PRISMA --> M_APPLE
 PRISMA --> M_QUOTA
+PRISMA --> M_MEM_OS
 ```
 
 **Diagram sources**
@@ -176,10 +192,12 @@ PRISMA --> M_QUOTA
 - [add_life_dimensions migration](file://backend/prisma/migrations/20260510170000_add_life_dimensions/migration.sql)
 - [add_sign_in_with_apple migration](file://backend/prisma/migrations/20260510180000_add_sign_in_with_apple/migration.sql)
 - [add_llm_usage_and_token_quotas migration](file://backend/prisma/migrations/20260510220000_add_llm_usage_and_token_quotas/migration.sql)
+- [20260630162100_memory_os_schema migration](file://backend/prisma/migrations/20260630162100_memory_os_schema/migration.sql)
 
 **Section sources**
 - [schema.prisma](file://backend/prisma/schema.prisma)
 - [init migration](file://backend/prisma/migrations/20260415125859_init/migration.sql)
+- [20260630162100_memory_os_schema migration](file://backend/prisma/migrations/20260630162100_memory_os_schema/migration.sql)
 
 ## Core Components
 This section outlines the principal entities and their attributes, with emphasis on primary keys, foreign keys, and indexes. It also highlights the two-layer memory architecture and semantic search.
@@ -187,7 +205,7 @@ This section outlines the principal entities and their attributes, with emphasis
 - Users
   - Primary key: id
   - Notable fields: phone number, Apple user ID, email, name, avatar URL, subscription tier, tri-chat usage, relationship health opt-in, last seen at, and consent records.
-  - Relations: owns Thoughts, Personas, Memories, UserContext, InsightReports, DayPlans, DailyCheckIns, ActionItems, PersonaDocuments, CoreChatMessages, Relationships, Rituals, LifeEvents, Tensions, PersonaChatMessages, Connections (sent/received), DirectMessages (sent/received), SharedNotes authored, MessageReactions, CoreChatSummaries, ProfileChangeLogs, KwConversations, KwDocuments, DimensionRatings, DimensionSignals, LlmUsage, TokenQuota.
+  - Relations: owns Thoughts, Personas, Memories, UserContext, InsightReports, DayPlans, DailyCheckIns, ActionItems, PersonaDocuments, CoreChatMessages, Relationships, Rituals, LifeEvents, Tensions, PersonaChatMessages, Connections (sent/received), DirectMessages (sent/received), SharedNotes authored, MessageReactions, CoreChatSummaries, ProfileChangeLogs, KwConversations, KwDocuments, DimensionRatings, DimensionSignals, LlmUsage, TokenQuota, MemoryPatterns.
   - Indexes: none declared in Prisma; presence of indexes depends on migrations.
 
 - Thoughts
@@ -228,8 +246,9 @@ This section outlines the principal entities and their attributes, with emphasis
   - Primary key: id
   - Foreign key: user_id → users.id (Cascade)
   - Lifecycle fields: status, supersededById, accessCount, lastAccessedAt, category, source
+  - **Memory OS fields**: confidence (Double precision, default 0.5), strength (Double precision, default 1.0), lastReinforcedAt (Timestamp), entities (JSONB), links (JSONB), emotion (JSONB)
   - Relations: belongs to User, has MemoryEmbedding.
-  - Indexes: user_id + status.
+  - Indexes: user_id + status, user_id + memory_type + status, user_id + strength.
 
 - MemoryEmbedding
   - Primary key: id
@@ -244,6 +263,13 @@ This section outlines the principal entities and their attributes, with emphasis
   - Vector type: vector(1536)
   - Foreign key: thought_id → thoughts.id (Cascade)
   - Relations: belongs to Thought.
+
+- MemoryPatterns
+  - Primary key: id
+  - Foreign key: user_id → users.id (Cascade)
+  - Fields: pattern (Text), evidence (JSONB, default empty array), confidence (Double precision, default 0.5), is_active (Boolean, default true)
+  - Indexes: user_id + is_active.
+  - Relations: belongs to User.
 
 - DayPlan
   - Primary key: id
@@ -428,11 +454,13 @@ This section outlines the principal entities and their attributes, with emphasis
 - [semantic_memory_search migration](file://backend/prisma/migrations/20260415143041_semantic_memory_search/migration.sql)
 - [add_memory_lifecycle migration](file://backend/prisma/migrations/20260425120506_add_memory_lifecycle/migration.sql)
 - [add_performance_indexes migration](file://backend/prisma/migrations/20260422213232_add_performance_indexes/migration.sql)
+- [20260630162100_memory_os_schema migration](file://backend/prisma/migrations/20260630162100_memory_os_schema/migration.sql)
 
 ## Architecture Overview
 The database follows a layered design:
 - Short-term memory: ThoughtThreads with ThoughtSummary captures ongoing conversations.
 - Long-term memory: Memories with MemoryEmbedding enable semantic search via pgvector.
+- **Memory OS enhancements**: Confidence and strength metrics, entity extraction, cross-referencing, emotional dimensions, and auto-discovered behavioral patterns.
 - Social and relationship features: Connections, DirectMessages, RelationshipPersons, Rituals, LifeEvents, Tensions.
 - Context and planning: UserContext, DayPlans, PlanTasks, DailyCheckIns, ActionItems.
 - Analytics and governance: InsightReports, OntologyEvents/Snapshots, Consent, LlmUsage, TokenQuota.
@@ -446,6 +474,8 @@ THOUGHT_THREADS ||--|| THOUGHT_SUMMARY : "summarizes"
 THOUGHTS ||--|| THOUGHT_EMBEDDING : "embeds"
 USERS ||--o{ MEMORIES : "owns"
 MEMORIES ||--|| MEMORY_EMBEDDING : "embeds"
+USERS ||--o{ MEMORY_PATTERNS : "generates"
+MEMORY_PATTERNS ||--|| USERS : "belongs to"
 USERS ||--o{ PERSONAS : "owns"
 PERSONAS ||--o{ PERSONA_RUNS : "executes"
 PERSONAS ||--o{ PERSONA_CHAT_MESSAGES : "participates"
@@ -477,6 +507,7 @@ USERS ||--o{ KW_DOCUMENTS : "uploads"
 
 **Diagram sources**
 - [schema.prisma](file://backend/prisma/schema.prisma)
+- [20260630162100_memory_os_schema migration](file://backend/prisma/migrations/20260630162100_memory_os_schema/migration.sql)
 
 ## Detailed Component Analysis
 
@@ -486,6 +517,7 @@ USERS ||--o{ KW_DOCUMENTS : "uploads"
   - Retrieval uses thread_key and thread-scoped summaries for continuity.
 - Long-term pgvector-embedded memories
   - Memories store content with importance scores and lifecycle metadata.
+  - **Memory OS enhancements**: confidence (0.0-1.0) measures trustworthiness, strength (0.0-2.0) measures durability, entities (JSONB), links (JSONB), emotion (JSONB with valence/arousal).
   - MemoryEmbedding stores vector(1536) embeddings enabling similarity search.
   - ThoughtEmbedding mirrors the same pattern for thoughts.
 
@@ -496,7 +528,12 @@ DecideType --> |Yes| CreateThread["Create ThoughtThread<br/>and ThoughtSummary"]
 DecideType --> |No| CreateMemory["Create Memory<br/>and MemoryEmbedding"]
 CreateThread --> ThreadKey["Ensure unique thread_key"]
 CreateMemory --> Vectorize["Generate embedding vector(1536)"]
-Vectorize --> PersistMem["Persist Memory and MemoryEmbedding"]
+Vectorize --> SetMetrics["Set confidence=importanceScore,<br/>strength=1.0, lastReinforcedAt=now()"]
+SetMetrics --> PersistMem["Persist Memory and MemoryEmbedding"]
+CreateMemory --> ExtractEntities["Extract entities via LLM"]
+ExtractEntities --> AddLinks["Add cross-references"]
+AddLinks --> AddEmotion["Add emotional dimensions"]
+AddEmotion --> PersistMem
 ThreadKey --> PersistThread["Persist ThoughtThread and ThoughtSummary"]
 PersistMem --> Search["Semantic search via vector similarity"]
 PersistThread --> Summarize["Update ThoughtSummary incrementally"]
@@ -510,18 +547,69 @@ Results --> End
 - [semantic_memory_search migration](file://backend/prisma/migrations/20260415143041_semantic_memory_search/migration.sql)
 - [add_insights_and_thought_embeddings migration](file://backend/prisma/migrations/20260415171832_add_insights_and_thought_embeddings/migration.sql)
 - [add_memory_lifecycle migration](file://backend/prisma/migrations/20260425120506_add_memory_lifecycle/migration.sql)
+- [20260630162100_memory_os_schema migration](file://backend/prisma/migrations/20260630162100_memory_os_schema/migration.sql)
 
 **Section sources**
 - [schema.prisma](file://backend/prisma/schema.prisma)
 - [semantic_memory_search migration](file://backend/prisma/migrations/20260415143041_semantic_memory_search/migration.sql)
 - [add_insights_and_thought_embeddings migration](file://backend/prisma/migrations/20260415171832_add_insights_and_thought_embeddings/migration.sql)
 - [add_memory_lifecycle migration](file://backend/prisma/migrations/20260425120506_add_memory_lifecycle/migration.sql)
+- [20260630162100_memory_os_schema migration](file://backend/prisma/migrations/20260630162100_memory_os_schema/migration.sql)
+
+### Memory OS Schema Enhancements
+
+**Updated** The Memory OS introduces sophisticated memory management with confidence scores, strength metrics, entity extraction, cross-referencing, and emotional dimensions.
+
+#### Memory Confidence and Strength Metrics
+- **Confidence (Double precision, default 0.5)**: Measures trustworthiness of memory content, grows with reinforcement and evidence, shrinks with neglect or contradictory evidence.
+- **Strength (Double precision, default 1.0)**: Measures durability and accessibility, decays over time, refreshed on access with 5% boost, capped at 2.0.
+- **Last Reinforced At**: Timestamp tracking when strength/confidence were last updated.
+
+#### Entity Extraction and Cross-Referencing
+- **Entities (JSONB)**: Extracted named entities (people, places, organizations, concepts) for semantic enrichment and cross-linking.
+- **Links (JSONB)**: Cross-references to related memories, goals, relationships, episodes, enabling rich semantic networks.
+- **Emotion (JSONB)**: Emotional dimensions including valence (-10 to 10) and arousal (0-10) for affective memory processing.
+
+#### Auto-Discovered Behavioral Patterns
+- **MemoryPatterns table**: Stores auto-generated patterns from user memories using LLM analysis.
+- **Pattern Detection**: Triggers every 20 new memories, identifies recurring behaviors with similarity threshold of 0.85.
+- **Pattern Lifecycle**: Active patterns with supporting evidence, deactivation after 60 days without new evidence.
+
+```mermaid
+sequenceDiagram
+participant MemoryManager as "Memory Manager"
+participant PatternDetector as "Pattern Detector"
+participant LLM as "OpenRouter LLM"
+participant DB as "Database"
+MemoryManager->>PatternDetector : maybeDetectPatterns(userId)
+PatternDetector->>DB : Query recent memories (50)
+PatternDetector->>LLM : Analyze patterns in memories
+LLM-->>PatternDetector : JSON array of patterns with evidence
+PatternDetector->>DB : Check existing similar patterns
+PatternDetector->>DB : Create/Update patterns
+PatternDetector->>DB : Deactivate stale patterns (>60 days)
+DB-->>PatternDetector : Pattern statistics
+PatternDetector-->>MemoryManager : {found, updated, deactivated}
+```
+
+**Diagram sources**
+- [pattern-detector.service.ts](file://backend/src/memory-os/pattern-detector.service.ts)
+- [memory-manager.service.ts](file://backend/src/memory-os/memory-manager.service.ts)
+
+**Section sources**
+- [20260630162100_memory_os_schema migration](file://backend/prisma/migrations/20260630162100_memory_os_schema/migration.sql)
+- [pattern-detector.service.ts](file://backend/src/memory-os/pattern-detector.service.ts)
+- [memory-manager.service.ts](file://backend/src/memory-os/memory-manager.service.ts)
 
 ### Semantic Search and Indexing Strategy
 - Vector extension
   - pgvector extension is installed and used for embeddings.
 - Embeddings
   - MemoryEmbedding.embedding and DocumentChunk.embedding are vector(1536).
+- **Memory OS indexing**
+  - memories(user_id, memory_type, status) for type-based queries
+  - memories(user_id, strength) for strength-based decay and retrieval
+  - memory_patterns(user_id, is_active) for pattern filtering
 - Indexing
   - Core indexes for performance include:
     - memories(user_id, status)
@@ -546,25 +634,30 @@ Results --> End
 ```mermaid
 sequenceDiagram
 participant Client as "Client"
-participant Service as "Memory Service"
+participant MemoryService as "Memory Service"
+participant PatternDetector as "Pattern Detector"
 participant DB as "PostgreSQL"
 participant Vector as "pgvector"
-Client->>Service : "Search memories by query"
-Service->>Service : "Embed query to vector(1536)"
-Service->>DB : "SELECT * FROM memories JOIN memory_embeddings ON memories.id = memory_embeddings.memory_id WHERE user_id=?"
+Client->>MemoryService : "Search memories by query"
+MemoryService->>MemoryService : "Embed query to vector(1536)"
+MemoryService->>DB : "SELECT * FROM memories JOIN memory_embeddings ON memories.id = memory_embeddings.memory_id WHERE user_id=?"
 DB->>Vector : "Order by embedding <-> query_embedding"
 Vector-->>DB : "Similarity scores"
-DB-->>Service : "Top-k rows"
-Service-->>Client : "Ranked memory results"
+DB-->>MemoryService : "Top-k rows with confidence/strength weighting"
+MemoryService->>PatternDetector : "maybeDetectPatterns(userId)"
+PatternDetector-->>MemoryService : "Pattern detection results"
+MemoryService-->>Client : "Ranked memory results + patterns"
 ```
 
 **Diagram sources**
 - [semantic_memory_search migration](file://backend/prisma/migrations/20260415143041_semantic_memory_search/migration.sql)
 - [add_performance_indexes migration](file://backend/prisma/migrations/20260422213232_add_performance_indexes/migration.sql)
+- [20260630162100_memory_os_schema migration](file://backend/prisma/migrations/20260630162100_memory_os_schema/migration.sql)
 
 **Section sources**
 - [semantic_memory_search migration](file://backend/prisma/migrations/20260415143041_semantic_memory_search/migration.sql)
 - [add_performance_indexes migration](file://backend/prisma/migrations/20260422213232_add_performance_indexes/migration.sql)
+- [20260630162100_memory_os_schema migration](file://backend/prisma/migrations/20260630162100_memory_os_schema/migration.sql)
 
 ### Data Validation Rules and Constraints
 - Uniqueness
@@ -581,25 +674,33 @@ Service-->>Client : "Ranked memory results"
   - Consent: (user_id, kind, version) unique.
   - TokenQuota: user_id unique.
   - OntologySnapshot: (user_id, domain, scopeId) unique.
+  - **MemoryPatterns**: id unique, pattern unique per user.
 - Defaults
-  - Many fields carry explicit defaults (e.g., Thought.status, Memory.source/status, Connection.status, Persona.isTemplate/isActive, etc.).
+  - Many fields carry explicit defaults (e.g., Thought.status, Memory.source/status, Connection.status, Persona.isTemplate/isActive, Memory.confidence=0.5, Memory.strength=1.0, MemoryPattern.confidence=0.5).
 - Referential integrity
-  - Cascading deletes on parent-child relations (e.g., deleting a User cascades to owned Thoughts/Memories).
+  - Cascading deletes on parent-child relations (e.g., deleting a User cascades to owned Thoughts/Memories/MemoryPatterns).
   - SetNull on optional child relations (e.g., LifeEvent.person_id).
 - Data types
   - UUID primary keys via Prisma default(uuid()).
   - vector(1536) for embeddings.
+  - Double precision for confidence and strength metrics.
+  - JSONB for entities, links, emotion, and pattern evidence.
   - Date vs DateTime depending on domain (e.g., DailyCheckIn.date, Dimension ratings weekStart).
 
 **Section sources**
 - [init migration](file://backend/prisma/migrations/20260415125859_init/migration.sql)
 - [schema.prisma](file://backend/prisma/schema.prisma)
+- [20260630162100_memory_os_schema migration](file://backend/prisma/migrations/20260630162100_memory_os_schema/migration.sql)
 
 ### Data Access Patterns
 - Conversation threads
   - Retrieve ThoughtThread by thread_key; fetch Messages ordered by createdAt; maintain ThoughtSummary incrementally.
 - Memory retrieval
-  - Filter Memories by user_id and status; rank by vector similarity to a query embedding; optionally filter by category/source.
+  - Filter Memories by user_id and status; rank by vector similarity to a query embedding plus confidence/strength weighting; optionally filter by category/source/memory_type.
+  - **Memory OS retrieval**: Composite ranking = 0.4×similarity + 0.25×strength + 0.15×confidence + 0.1×importance + 0.1×recency.
+- Pattern detection
+  - Triggered every 20 memories; analyzes recent memories (50) for recurring patterns.
+  - Uses LLM to identify patterns, stores evidence as memory IDs.
 - Social messaging
   - List DirectMessages between two users; paginate by createdAt; handle reply chains via replyToId.
 - Planning and dimensions
@@ -613,6 +714,8 @@ Service-->>Client : "Ranked memory results"
 - [add_day_planner migration](file://backend/prisma/migrations/20260415175017_add_day_planner/migration.sql)
 - [add_life_dimensions_features migration](file://backend/prisma/migrations/20260415184323_add_life_dimensions_features/migration.sql)
 - [add_llm_usage_and_token_quotas migration](file://backend/prisma/migrations/20260510220000_add_llm_usage_and_token_quotas/migration.sql)
+- [memory-manager.service.ts](file://backend/src/memory-os/memory-manager.service.ts)
+- [pattern-detector.service.ts](file://backend/src/memory-os/pattern-detector.service.ts)
 
 ### Caching Considerations
 - Session recap cache
@@ -621,18 +724,26 @@ Service-->>Client : "Ranked memory results"
   - Connection tracks triChatClearedAtRequester and triChatClearedAtRecipient; triChatClearedSummary caches a concise recap for mediator continuity after a one-sided clear.
 - Core chat summaries
   - CoreChatSummary aggregates session-level summaries with counts and key topics for dashboard and analytics.
+- **Memory OS caching**
+  - Pattern detection results cached in memory; trigger based on memory count thresholds.
+  - Entity extraction results cached for performance.
 
 **Section sources**
 - [add_session_recap_cache migration](file://backend/prisma/migrations/20260510150000_add_session_recap_cache/migration.sql)
 - [clear_history_one_sided migration](file://backend/prisma/migrations/20260501070733_clear_history_one_sided/migration.sql)
 - [add_core_chat_session_start migration](file://backend/prisma/migrations/20260425082634_add_core_chat_session_start/migration.sql)
+- [pattern-detector.service.ts](file://backend/src/memory-os/pattern-detector.service.ts)
 
 ### Data Lifecycle Management
 - Memory lifecycle
   - Status lifecycle: active → consolidated/archived/contradicted; supersededById links superseding memories; accessCount and lastAccessedAt track usage.
+  - **Memory OS lifecycle**: confidence and strength metrics automatically updated on access and reinforcement.
   - Category/source tagging enables filtering and routing; retention and archival governed by service logic.
 - Consolidation
   - Memory consolidation service merges low-signal memories into higher-level summaries; updates status and links via supersededById.
+- **Pattern lifecycle**
+  - Auto-generated patterns with confidence scoring; deactivation after 60 days without supporting evidence.
+  - Evidence stored as memory IDs for traceability.
 - Export and deletion
   - Consent-driven export/delete pathways ensure compliance with privacy requirements.
 
@@ -653,11 +764,13 @@ Contradicted --> Active : "resolve"
 **Section sources**
 - [add_memory_lifecycle migration](file://backend/prisma/migrations/20260425120506_add_memory_lifecycle/migration.sql)
 - [add_consent_and_export_delete migration](file://backend/prisma/migrations/20260510160032_add_consent_and_export_delete/migration.sql)
+- [pattern-detector.service.ts](file://backend/src/memory-os/pattern-detector.service.ts)
 
 ### Migration Management and Version Control
 - Migrations are stored under backend/prisma/migrations with timestamped folders and migration.sql files.
 - Each migration adds tables, alters columns, creates indexes, and enforces foreign keys.
 - The vector extension is introduced early to support embeddings.
+- **Memory OS migration (20260630162100)**: Adds confidence, strength, entities, links, emotion fields to memories; creates memory_patterns table; adds pattern detection service.
 - Recent migrations add tri-chat, mediator v2, consent, quotas, and other features.
 
 ```mermaid
@@ -696,6 +809,7 @@ AE --> AF["20260510160032_add_consent_and_export_delete"]
 AF --> AG["20260510170000_add_life_dimensions"]
 AG --> AH["20260510180000_add_sign_in_with_apple"]
 AH --> AI["20260510220000_add_llm_usage_and_token_quotas"]
+AI --> AJ["20260630162100_memory_os_schema"]
 ```
 
 **Diagram sources**
@@ -734,9 +848,11 @@ AH --> AI["20260510220000_add_llm_usage_and_token_quotas"]
 - [add_life_dimensions migration](file://backend/prisma/migrations/20260510170000_add_life_dimensions/migration.sql)
 - [add_sign_in_with_apple migration](file://backend/prisma/migrations/20260510180000_add_sign_in_with_apple/migration.sql)
 - [add_llm_usage_and_token_quotas migration](file://backend/prisma/migrations/20260510220000_add_llm_usage_and_token_quotas/migration.sql)
+- [20260630162100_memory_os_schema migration](file://backend/prisma/migrations/20260630162100_memory_os_schema/migration.sql)
 
 **Section sources**
 - [schema.prisma](file://backend/prisma/schema.prisma)
+- [20260630162100_memory_os_schema migration](file://backend/prisma/migrations/20260630162100_memory_os_schema/migration.sql)
 
 ### Data Security, Privacy, and Access Control
 - Authentication identifiers
@@ -749,6 +865,7 @@ AH --> AI["20260510220000_add_llm_usage_and_token_quotas"]
   - All relations are scoped to user_id; service layers enforce ownership and visibility rules.
 - Privacy-compliant indexes
   - No PII is indexed directly; sensitive fields are not part of public indexes.
+  - **Memory OS fields**: Entities, links, emotion, and pattern evidence are JSONB stored separately from PII.
 
 **Section sources**
 - [add_sign_in_with_apple migration](file://backend/prisma/migrations/20260510180000_add_sign_in_with_apple/migration.sql)
@@ -766,6 +883,8 @@ Threads --> Messages["Messages"]
 Threads --> Summaries["ThoughtSummaries"]
 Users --> Memories["Memories"]
 Memories --> MemEmb["MemoryEmbeddings"]
+Users --> MemoryPatterns["MemoryPatterns"]
+MemoryPatterns --> Users["Users"]
 Users --> Personas["Personas"]
 Personas --> Runs["PersonaRuns"]
 Users --> Plans["DayPlans"]
@@ -795,6 +914,7 @@ Users --> KWD["KwDocuments"]
 
 **Diagram sources**
 - [schema.prisma](file://backend/prisma/schema.prisma)
+- [20260630162100_memory_os_schema migration](file://backend/prisma/migrations/20260630162100_memory_os_schema/migration.sql)
 
 **Section sources**
 - [schema.prisma](file://backend/prisma/schema.prisma)
@@ -804,14 +924,17 @@ Users --> KWD["KwDocuments"]
   - Ensure pgvector is properly configured and tuned; consider ivfflat or hnsw indexes for large-scale similarity search.
 - Index coverage
   - Leverage existing composite indexes for frequent queries (e.g., user-scoped lists, time-series slices).
+  - **Memory OS indexing**: memory_type + status for type filtering, strength for decay calculations.
 - Pagination
   - Use cursor-based pagination on createdAt for large timelines (e.g., DirectMessages, CoreChatMessages, LlmUsage).
 - Caching
   - Cache frequently accessed summaries (session recap, dimension trends) to reduce DB load.
+  - **Memory OS caching**: Pattern detection results, entity extraction, and memory access patterns.
 - Quotas and monitoring
   - Enforce token quotas per user and monitor LlmUsage to prevent abuse.
-
-[No sources needed since this section provides general guidance]
+- **Memory OS performance**: 
+  - Pattern detection triggers every 20 memories to balance accuracy and performance.
+  - Text similarity threshold (0.85) prevents excessive pattern duplication.
 
 ## Troubleshooting Guide
 - Missing vector extension
@@ -822,19 +945,22 @@ Users --> KWD["KwDocuments"]
   - Resolution: verify embedding dimension matches vector(1536) and normalization strategy.
 - Index missing
   - Symptom: slow queries on user-scoped lists.
-  - Resolution: confirm relevant indexes exist (e.g., memories_user_id_status, direct_messages_user_composite).
+  - Resolution: confirm relevant indexes exist (e.g., memories_user_id_status, direct_messages_user_composite, memories_user_memorytype_status_idx).
 - Orphaned records
   - Symptom: foreign key constraint failures during cleanup.
   - Resolution: rely on CASCADE deletes; verify cascade paths in Prisma relations.
+- **Memory OS issues**:
+  - Pattern detection failing: check OPENROUTER_API_KEY configuration and model availability.
+  - Entity extraction errors: verify LLM API connectivity and response parsing.
+  - Memory confidence/strength not updating: verify reinforce() service execution after retrieval.
 
 **Section sources**
 - [semantic_memory_search migration](file://backend/prisma/migrations/20260415143041_semantic_memory_search/migration.sql)
 - [add_performance_indexes migration](file://backend/prisma/migrations/20260422213232_add_performance_indexes/migration.sql)
+- [20260630162100_memory_os_schema migration](file://backend/prisma/migrations/20260630162100_memory_os_schema/migration.sql)
 
 ## Conclusion
-The 4Ever database schema integrates conversational memory, semantic search, social features, planning, and governance into a cohesive system. The two-layer memory architecture balances short-term thread continuity with long-term semantic recall. Strong referential integrity, thoughtful indexing, and a robust consent and quota framework support scalability, compliance, and performance.
-
-[No sources needed since this section summarizes without analyzing specific files]
+The 4Ever database schema integrates conversational memory, semantic search, social features, planning, and governance into a cohesive system. The two-layer memory architecture balances short-term thread continuity with long-term semantic recall. **The Memory OS enhancements significantly improve memory management with confidence and strength metrics, entity extraction, cross-referencing, emotional dimensions, and auto-discovered behavioral patterns.** Strong referential integrity, thoughtful indexing, and a robust consent and quota framework support scalability, compliance, and performance.
 
 ## Appendices
 
@@ -854,11 +980,13 @@ The 4Ever database schema integrates conversational memory, semantic search, soc
 - ThoughtSummary
   - Fields: id, thread_id, running_summary, updated_at.
 - Memories
-  - Fields: id, user_id, memory_type, content, importance_score, source_thread_id, last_accessed_at, access_count, status, superseded_by_id, category, source, created_at, updated_at.
+  - Fields: id, user_id, memory_type, content, importance_score, source_thread_id, last_accessed_at, access_count, status, superseded_by_id, category, source, confidence, strength, last_reinforced_at, entities, links, emotion, created_at, updated_at.
 - MemoryEmbedding
   - Fields: id, memory_id, embedding, created_at.
 - ThoughtEmbedding
   - Fields: id, thought_id, embedding, created_at.
+- MemoryPatterns
+  - Fields: id, user_id, pattern, evidence, confidence, is_active, created_at, updated_at.
 - DayPlan
   - Fields: id, user_id, date, created_at, updated_at.
 - PlanTask
@@ -928,3 +1056,4 @@ The 4Ever database schema integrates conversational memory, semantic search, soc
 
 **Section sources**
 - [schema.prisma](file://backend/prisma/schema.prisma)
+- [20260630162100_memory_os_schema migration](file://backend/prisma/migrations/20260630162100_memory_os_schema/migration.sql)

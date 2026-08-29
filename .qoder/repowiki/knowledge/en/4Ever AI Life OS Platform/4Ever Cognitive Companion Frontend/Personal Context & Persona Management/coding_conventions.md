@@ -1,3 +1,0 @@
-- Each page component uses local `useState` for loading/error/data states and inline `try/catch` blocks with `toast.error` for error handling.
-- API calls are wrapped in async handlers that set loading flags before the request and reset them in `finally` blocks.
-- Form state is managed via a single `formData` state object updated through spread operators in change handlers.
