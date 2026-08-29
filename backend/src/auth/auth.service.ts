@@ -23,11 +23,6 @@ export class AuthService {
     const awsSecretKey = process.env.AWS_SECRET_ACCESS_KEY || this.configService.get<string>('AWS_SECRET_ACCESS_KEY');
     this.snsSenderId = process.env.AWS_SNS_SENDER_ID || this.configService.get<string>('AWS_SNS_SENDER_ID') || '';
 
-    // Debug: log what we actually received
-    console.log('[Auth] AWS_REGION:', awsRegion);
-    console.log('[Auth] AWS_ACCESS_KEY_ID:', awsKeyId ? `${awsKeyId.substring(0, 8)}...` : 'MISSING');
-    console.log('[Auth] AWS_SECRET_ACCESS_KEY:', awsSecretKey ? 'SET' : 'MISSING');
-
     // Initialize SNS client only if credentials are present and not placeholders
     if (awsKeyId && awsSecretKey && !awsKeyId.startsWith('replace-')) {
       this.snsClient = new SNSClient({
@@ -141,10 +136,9 @@ export class AuthService {
       throw new UnauthorizedException('Too many failed attempts. Please request a new OTP.');
     }
 
-    // Verify code — in dev mode, accept any 6-digit code for easy testing
-    const isDev = process.env.NODE_ENV !== 'production';
-    const codeValid = isDev ? /^\d{6}$/.test(code) : otpRecord.code === code;
-    if (!codeValid) {
+    // Always verify the generated code. Development convenience must never
+    // turn a missing or misspelled NODE_ENV into an authentication bypass.
+    if (otpRecord.code !== code) {
       await this.prisma.otpCode.update({
         where: { id: otpRecord.id },
         data: { attempts: { increment: 1 } },

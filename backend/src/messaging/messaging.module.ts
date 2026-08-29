@@ -10,6 +10,7 @@ import { MediatorService } from './mediator.service';
 import { MessagingGateway } from './messaging.gateway';
 import { ConnectionsController } from './connections.controller';
 import { MessagesController } from './messages.controller';
+import { requireJwtSecret } from '../auth/jwt-secret';
 
 @Module({
   imports: [
@@ -19,7 +20,7 @@ import { MessagesController } from './messages.controller';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        secret: config.get<string>('JWT_SECRET') || 'default-secret',
+        secret: requireJwtSecret(config),
       }),
     }),
   ],

@@ -5,6 +5,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
+import { requireJwtSecret } from './jwt-secret';
 
 @Module({
   imports: [
@@ -12,16 +13,7 @@ import { JwtStrategy } from './jwt.strategy';
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => {
-        // Fail-closed: refuse to boot without a real JWT secret. Prevents the
-        // catastrophic scenario where a misconfigured prod box signs tokens
-        // with the word 'default-secret' and any attacker can forge them.
-        const secret = configService.get<string>('JWT_SECRET');
-        if (!secret || secret.length < 16) {
-          throw new Error(
-            'JWT_SECRET must be set to a strong random value (>=16 chars). ' +
-            'Generate with: node -e "console.log(require(\'crypto\').randomBytes(48).toString(\'hex\'))"',
-          );
-        }
+        const secret = requireJwtSecret(configService);
         return {
           secret,
           signOptions: {

@@ -12,6 +12,7 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { MessagingService } from './messaging.service';
 import { MediatorService } from './mediator.service';
+import { requireJwtSecret } from '../auth/jwt-secret';
 
 interface AuthSocket extends Socket {
   userId?: string;
@@ -135,8 +136,7 @@ export class MessagingGateway
         return;
       }
 
-      const secret =
-        this.configService.get<string>('JWT_SECRET') || 'default-secret';
+      const secret = requireJwtSecret(this.configService);
       const payload = this.jwtService.verify(token, { secret });
       client.userId = payload.sub;
 
